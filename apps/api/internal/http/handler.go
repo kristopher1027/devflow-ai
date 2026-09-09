@@ -3,6 +3,8 @@ package http
 import (
 	"encoding/json"
 	nethttp "net/http"
+
+	"github.com/kristopher1027/devflow-ai/internal/service"
 )
 
 func HealthHandler(w nethttp.ResponseWriter, r *nethttp.Request) {
@@ -14,4 +16,47 @@ func HealthHandler(w nethttp.ResponseWriter, r *nethttp.Request) {
 	}
 
 	json.NewEncoder(w).Encode(response)
+}
+
+type UserHandler struct {
+	service *service.UserService
+}
+
+func NewUserHandler(service *service.UserService) *UserHandler {
+	return &UserHandler{
+		service: service,
+	}
+}
+
+func (h *UserHandler) GetUser(
+	w nethttp.ResponseWriter,
+	r *nethttp.Request,
+) {
+	email := r.URL.Query().Get("email")
+
+	if email == "" {
+		nethttp.Error(
+			w,
+			"email is required",
+			nethttp.StatusBadRequest,
+		)
+		return
+	}
+
+	user, err := h.service.FindUserByEmail(
+		r.Context(),
+		email,
+	)
+	if err != nil {
+		nethttp.Error(
+			w,
+			err.Error(),
+			nethttp.StatusInternalServerError,
+		)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	json.NewEncoder(w).Encode(user)
 }
