@@ -2,12 +2,12 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"github.com/google/uuid"
 	"os"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
 
 	"github.com/kristopher1027/devflow-ai/internal/auth"
 	"github.com/kristopher1027/devflow-ai/internal/database"
@@ -295,5 +295,88 @@ func TestUserRepositoryCreate(t *testing.T) {
 
 	if storedPasswordHash != passwordHash {
 		t.Fatal("expected password hash to match")
+	}
+}
+
+func TestUserRepositoryCreateDuplicateEmail(t *testing.T) {
+	if os.Getenv("DATABASE_URL") == "" {
+		t.Fatal("DATABASE_URL is required")
+	}
+
+	ctx := context.Background()
+
+	db, err := database.Connect(
+		ctx,
+		os.Getenv("DATABASE_URL"),
+	)
+	if err != nil {
+		t.Fatalf("connect database: %v", err)
+	}
+
+	t.Cleanup(func() {
+		db.Close()
+	})
+
+	repo := NewUserRepository(db)
+
+	email := fmt.Sprintf(
+		"test-%s@example.com",
+		uuid.NewString(),
+	)
+
+	passwordHash, err := auth.HashPassword(
+		"correct-password",
+	)
+	if err != nil {
+		t.Fatalf("hash password: %v", err)
+	}
+
+	now := time.Now()
+
+	firstUser := &domain.User{
+		ID:        uuid.NewString(),
+		Email:     email,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+
+	secondUser := &domain.User{
+		ID:        uuid.NewString(),
+		Email:     email,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+
+	t.Cleanup(func() {
+		_, err := db.Pool.Exec(
+			context.Background(),
+			`DELETE FROM users WHERE id IN ($1, $2)`,
+			firstUser.ID,
+			secondUser.ID,
+		)
+		if err != nil {
+			t.Errorf("cleanup test users: %v", err)
+		}
+	})
+
+	if err := repo.Create(
+		ctx,
+		firstUser,
+		passwordHash,
+	); err != nil {
+		t.Fatalf("create first user: %v", err)
+	}
+
+	err = repo.Create(
+		ctx,
+		secondUser,
+		passwordHash,
+	)
+
+	if !errors.Is(err, ErrEmailAlreadyExists) {
+		t.Fatalf(
+			"expected ErrEmailAlreadyExists, got %v",
+			err,
+		)
 	}
 }

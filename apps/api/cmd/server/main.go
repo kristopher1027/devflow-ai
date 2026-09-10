@@ -30,10 +30,21 @@ func main() {
 	log.Println("database connection established")
 
 	userRepository := repository.NewUserRepository(db)
+
 	userService := service.NewUserService(userRepository)
 	userHandler := devflowhttp.NewUserHandler(userService)
 
-	router := devflowhttp.NewRouter(userHandler)
+	registrationService := service.NewRegistrationService(
+		userRepository,
+	)
+	registrationHandler := devflowhttp.NewRegistrationHandler(
+		registrationService,
+	)
+
+	router := devflowhttp.NewRouter(
+		userHandler,
+		registrationHandler,
+	)
 
 	app := server.New(":"+cfg.Port, router)
 

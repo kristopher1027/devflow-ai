@@ -6,12 +6,16 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/kristopher1027/devflow-ai/internal/database"
 	"github.com/kristopher1027/devflow-ai/internal/domain"
 )
 
-var ErrUserNotFound = errors.New("user not found")
+var (
+	ErrUserNotFound       = errors.New("user not found")
+	ErrEmailAlreadyExists = errors.New("email already exists")
+)
 
 type UserRepository interface {
 	Create(
@@ -39,6 +43,47 @@ func NewUserRepository(db *database.DB) UserRepository {
 	return &PostgresUserRepository{
 		db: db,
 	}
+}
+
+func (r *PostgresUserRepository) Create(
+	ctx context.Context,
+	user *domain.User,
+	passwordHash string,
+) error {
+	query := `
+		INSERT INTO users (
+			id,
+			email,
+			password_hash,
+			created_at,
+			updated_at
+		)
+		VALUES ($1, $2, $3, $4, $5)
+	`
+
+	_, err := r.db.Pool.Exec(
+		ctx,
+		query,
+		user.ID,
+		user.Email,
+		passwordHash,
+		user.CreatedAt,
+		user.UpdatedAt,
+	)
+
+	if err != nil {
+		var pgErr *pgconn.PgError
+
+		if errors.As(err, &pgErr) &&
+			pgErr.Code == "23505" &&
+			pgErr.ConstraintName == "users_email_key" {
+			return ErrEmailAlreadyExists
+		}
+
+		return fmt.Errorf("create user: %w", err)
+	}
+
+	return nil
 }
 
 func (r *PostgresUserRepository) FindByEmail(
@@ -108,33 +153,4 @@ func (r *PostgresUserRepository) FindCredentialsByEmail(
 	}
 
 	return &credentials, nil
-}
-
-func (r *PostgresUserRepository) Create(
-	ctx context.Context,
-	user *domain.User,
-	passwordHash string,
-) error {
-	query := `
-        INSERT INTO users (
-            id,
-            email,
-            password_hash,
-            created_at,
-            updated_at
-        )
-        VALUES ($1, $2, $3, $4, $5)
-    `
-
-	_, err := r.db.Pool.Exec(
-		ctx,
-		query,
-		user.ID,
-		user.Email,
-		passwordHash,
-		user.CreatedAt,
-		user.UpdatedAt,
-	)
-
-	return err
 }
