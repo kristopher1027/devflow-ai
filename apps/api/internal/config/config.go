@@ -1,10 +1,14 @@
 package config
 
-import "os"
+import (
+	"os"
+	"strconv"
+)
 
 type Config struct {
-	Port        string
-	DatabaseURL string
+	Port         string
+	DatabaseURL  string
+	CookieSecure bool
 }
 
 func Load() Config {
@@ -15,8 +19,18 @@ func Load() Config {
 
 	databaseURL := os.Getenv("DATABASE_URL")
 
+	cookieSecure := false
+
+	if value := os.Getenv("DEVFLOW_COOKIE_SECURE"); value != "" {
+		parsed, err := strconv.ParseBool(value)
+		if err == nil {
+			cookieSecure = parsed
+		}
+	}
+
 	return Config{
-		Port:        port,
-		DatabaseURL: databaseURL,
+		Port:         port,
+		DatabaseURL:  databaseURL,
+		CookieSecure: cookieSecure,
 	}
 }
