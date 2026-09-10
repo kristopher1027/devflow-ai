@@ -2,8 +2,10 @@ package http
 
 import (
 	"encoding/json"
+	"errors"
 	nethttp "net/http"
 
+	"github.com/kristopher1027/devflow-ai/internal/repository"
 	"github.com/kristopher1027/devflow-ai/internal/service"
 )
 
@@ -19,10 +21,10 @@ func HealthHandler(w nethttp.ResponseWriter, r *nethttp.Request) {
 }
 
 type UserHandler struct {
-	service *service.UserService
+	service service.UserService
 }
 
-func NewUserHandler(service *service.UserService) *UserHandler {
+func NewUserHandler(service service.UserService) *UserHandler {
 	return &UserHandler{
 		service: service,
 	}
@@ -48,9 +50,18 @@ func (h *UserHandler) GetUser(
 		email,
 	)
 	if err != nil {
+		if errors.Is(err, repository.ErrUserNotFound) {
+			nethttp.Error(
+				w,
+				"user not found",
+				nethttp.StatusNotFound,
+			)
+			return
+		}
+
 		nethttp.Error(
 			w,
-			err.Error(),
+			"internal server error",
 			nethttp.StatusInternalServerError,
 		)
 		return

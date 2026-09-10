@@ -7,17 +7,24 @@ import (
 	"github.com/kristopher1027/devflow-ai/internal/repository"
 )
 
-type UserService struct {
+type UserService interface {
+	FindUserByEmail(
+		ctx context.Context,
+		email string,
+	) (*domain.User, error)
+}
+
+type UserServiceImpl struct {
 	users repository.UserRepository
 }
 
-func NewUserService(users repository.UserRepository) *UserService {
-	return &UserService{
+func NewUserService(users repository.UserRepository) UserService {
+	return &UserServiceImpl{
 		users: users,
 	}
 }
 
-func (s *UserService) FindUserByEmail(
+func (s *UserServiceImpl) FindUserByEmail(
 	ctx context.Context,
 	email string,
 ) (*domain.User, error) {

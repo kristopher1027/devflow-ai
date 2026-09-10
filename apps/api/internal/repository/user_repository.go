@@ -14,10 +14,21 @@ import (
 var ErrUserNotFound = errors.New("user not found")
 
 type UserRepository interface {
+	Create(
+		ctx context.Context,
+		user *domain.User,
+		passwordHash string,
+	) error
+
 	FindByEmail(
 		ctx context.Context,
 		email string,
 	) (*domain.User, error)
+
+	FindCredentialsByEmail(
+		ctx context.Context,
+		email string,
+	) (*domain.UserCredentials, error)
 }
 
 type PostgresUserRepository struct {
@@ -62,4 +73,68 @@ func (r *PostgresUserRepository) FindByEmail(
 	}
 
 	return &user, nil
+}
+
+func (r *PostgresUserRepository) FindCredentialsByEmail(
+	ctx context.Context,
+	email string,
+) (*domain.UserCredentials, error) {
+	query := `
+		SELECT id, password_hash
+		FROM users
+		WHERE email = $1
+	`
+
+	var credentials domain.UserCredentials
+
+	err := r.db.Pool.QueryRow(
+		ctx,
+		query,
+		email,
+	).Scan(
+		&credentials.UserID,
+		&credentials.PasswordHash,
+	)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
+
+		return nil, fmt.Errorf(
+			"find user credentials by email: %w",
+			err,
+		)
+	}
+
+	return &credentials, nil
+}
+
+func (r *PostgresUserRepository) Create(
+	ctx context.Context,
+	user *domain.User,
+	passwordHash string,
+) error {
+	query := `
+        INSERT INTO users (
+            id,
+            email,
+            password_hash,
+            created_at,
+            updated_at
+        )
+        VALUES ($1, $2, $3, $4, $5)
+    `
+
+	_, err := r.db.Pool.Exec(
+		ctx,
+		query,
+		user.ID,
+		user.Email,
+		passwordHash,
+		user.CreatedAt,
+		user.UpdatedAt,
+	)
+
+	return err
 }

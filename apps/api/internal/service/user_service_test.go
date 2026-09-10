@@ -15,6 +15,14 @@ type fakeUserRepository struct {
 	err  error
 }
 
+func (f *fakeUserRepository) Create(
+	ctx context.Context,
+	user *domain.User,
+	passwordHash string,
+) error {
+	return nil
+}
+
 func (f *fakeUserRepository) FindByEmail(
 	ctx context.Context,
 	email string,
@@ -67,4 +75,10 @@ func TestUserServiceFindUserByEmailNotFound(t *testing.T) {
 			err,
 		)
 	}
+}
+func (f *fakeUserRepository) FindCredentialsByEmail(
+	ctx context.Context,
+	email string,
+) (*domain.UserCredentials, error) {
+	return nil, nil
 }
