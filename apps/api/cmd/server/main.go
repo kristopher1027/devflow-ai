@@ -55,10 +55,15 @@ func main() {
 		cfg.CookieSecure,
 	)
 
+	authMiddleware := devflowhttp.NewAuthMiddleware(
+		sessionRepository,
+	)
+
 	router := devflowhttp.NewRouter(
 		userHandler,
 		registrationHandler,
 		loginHandler,
+		authMiddleware,
 	)
 
 	app := server.New(":"+cfg.Port, router)
