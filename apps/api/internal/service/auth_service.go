@@ -16,6 +16,11 @@ type AuthService interface {
 		ctx context.Context,
 		tokenHash string,
 	) (*domain.Session, error)
+
+	Logout(
+		ctx context.Context,
+		tokenHash string,
+	) error
 }
 
 type AuthServiceImpl struct {
@@ -47,4 +52,14 @@ func (s *AuthServiceImpl) AuthenticateSession(
 	}
 
 	return session, nil
+}
+
+func (s *AuthServiceImpl) Logout(
+	ctx context.Context,
+	tokenHash string,
+) error {
+	return s.sessions.DeleteByTokenHash(
+		ctx,
+		tokenHash,
+	)
 }

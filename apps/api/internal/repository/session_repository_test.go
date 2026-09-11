@@ -229,6 +229,7 @@ func TestSessionRepositoryFindByTokenHash(t *testing.T) {
 		)
 	}
 }
+
 func TestSessionRepositoryFindByTokenHashNotFound(t *testing.T) {
 	databaseURL := os.Getenv("DATABASE_URL")
 
@@ -251,12 +252,92 @@ func TestSessionRepositoryFindByTokenHashNotFound(t *testing.T) {
 
 	_, err = repo.FindByTokenHash(
 		ctx,
-		"does-not-exist-" + uuid.NewString(),
+		"does-not-exist-"+uuid.NewString(),
 	)
 
 	if err != ErrSessionNotFound {
 		t.Fatalf(
 			"expected ErrSessionNotFound, got %v",
+			err,
+		)
+	}
+}
+
+func TestSessionRepositoryDeleteByTokenHash(t *testing.T) {
+	databaseURL := os.Getenv("DATABASE_URL")
+
+	if databaseURL == "" {
+		t.Fatal("DATABASE_URL is required")
+	}
+
+	ctx := context.Background()
+
+	db, err := database.Connect(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("connect to database: %v", err)
+	}
+
+	repo := NewSessionRepository(db)
+
+	userID := uuid.New()
+	sessionID := uuid.New()
+	tokenHash := "delete-test-token-" + uuid.NewString()
+	email := "session-delete-" + uuid.NewString() + "@example.com"
+
+	_, err = db.Pool.Exec(
+		ctx,
+		`
+		INSERT INTO users (id, email)
+		VALUES ($1, $2)
+		`,
+		userID,
+		email,
+	)
+	if err != nil {
+		db.Close()
+		t.Fatalf("insert test user: %v", err)
+	}
+
+	t.Cleanup(func() {
+		_, err := db.Pool.Exec(
+			context.Background(),
+			"DELETE FROM users WHERE id = $1",
+			userID,
+		)
+
+		if err != nil {
+			t.Errorf("cleanup test user: %v", err)
+		}
+
+		db.Close()
+	})
+
+	now := time.Now()
+
+	session := &domain.Session{
+		ID:         sessionID.String(),
+		UserID:     userID.String(),
+		TokenHash:  tokenHash,
+		ExpiresAt:  now.Add(24 * time.Hour),
+		CreatedAt:  now,
+		LastSeenAt: now,
+	}
+
+	err = repo.Create(ctx, session)
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+
+	err = repo.DeleteByTokenHash(ctx, tokenHash)
+	if err != nil {
+		t.Fatalf("delete session: %v", err)
+	}
+
+	_, err = repo.FindByTokenHash(ctx, tokenHash)
+
+	if err != ErrSessionNotFound {
+		t.Fatalf(
+			"expected ErrSessionNotFound after deletion, got %v",
 			err,
 		)
 	}

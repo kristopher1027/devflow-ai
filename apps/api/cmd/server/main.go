@@ -29,12 +29,17 @@ func main() {
 
 	log.Println("database connection established")
 
+	// Repositories
 	userRepository := repository.NewUserRepository(db)
 	sessionRepository := repository.NewSessionRepository(db)
+	workspaceRepository := repository.NewWorkspaceRepository(db)
+	workspaceMemberRepository := repository.NewWorkspaceMemberRepository(db)
 
+	// User
 	userService := service.NewUserService(userRepository)
 	userHandler := devflowhttp.NewUserHandler(userService)
 
+	// Registration
 	registrationService := service.NewRegistrationService(
 		userRepository,
 	)
@@ -42,10 +47,21 @@ func main() {
 		registrationService,
 	)
 
+	// Authentication
+	authService := service.NewAuthService(
+		sessionRepository,
+	)
+
+	authMiddleware := devflowhttp.NewAuthMiddleware(
+		authService,
+	)
+
+	// Session
 	sessionService := service.NewSessionService(
 		sessionRepository,
 	)
 
+	// Login
 	loginService := service.NewLoginService(
 		userRepository,
 		sessionService,
@@ -55,14 +71,21 @@ func main() {
 		cfg.CookieSecure,
 	)
 
-	authMiddleware := devflowhttp.NewAuthMiddleware(
-		sessionRepository,
+	// Workspace
+	workspaceService := service.NewWorkspaceServiceWithMembers(
+		workspaceRepository,
+		workspaceMemberRepository,
+	)
+	workspaceHandler := devflowhttp.NewWorkspaceHandler(
+		workspaceService,
 	)
 
+	// Router
 	router := devflowhttp.NewRouter(
 		userHandler,
 		registrationHandler,
 		loginHandler,
+		workspaceHandler,
 		authMiddleware,
 	)
 

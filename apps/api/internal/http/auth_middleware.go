@@ -4,10 +4,9 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"time"
 
 	"github.com/kristopher1027/devflow-ai/internal/auth"
-	"github.com/kristopher1027/devflow-ai/internal/repository"
+	"github.com/kristopher1027/devflow-ai/internal/service"
 )
 
 type contextKey string
@@ -15,14 +14,14 @@ type contextKey string
 const userIDContextKey contextKey = "userID"
 
 type AuthMiddleware struct {
-	sessions repository.SessionRepository
+	authService service.AuthService
 }
 
 func NewAuthMiddleware(
-	sessions repository.SessionRepository,
+	authService service.AuthService,
 ) *AuthMiddleware {
 	return &AuthMiddleware{
-		sessions: sessions,
+		authService: authService,
 	}
 }
 
@@ -45,15 +44,18 @@ func (m *AuthMiddleware) RequireAuth(
 
 		tokenHash := auth.HashSessionToken(cookie.Value)
 
-		session, err := m.sessions.FindByTokenHash(
+		session, err := m.authService.AuthenticateSession(
 			r.Context(),
 			tokenHash,
 		)
 		if err != nil {
-			if errors.Is(err, repository.ErrSessionNotFound) {
+			if errors.Is(
+				err,
+				service.ErrSessionExpired,
+			) {
 				http.Error(
 					w,
-					"authentication required",
+					"session expired",
 					http.StatusUnauthorized,
 				)
 				return
@@ -61,16 +63,7 @@ func (m *AuthMiddleware) RequireAuth(
 
 			http.Error(
 				w,
-				"internal server error",
-				http.StatusInternalServerError,
-			)
-			return
-		}
-
-		if time.Now().After(session.ExpiresAt) {
-			http.Error(
-				w,
-				"session expired",
+				"authentication required",
 				http.StatusUnauthorized,
 			)
 			return
@@ -88,7 +81,10 @@ func (m *AuthMiddleware) RequireAuth(
 		)
 	})
 }
-func UserIDFromContext(ctx context.Context) (string, bool) {
+
+func UserIDFromContext(
+	ctx context.Context,
+) (string, bool) {
 	userID, ok := ctx.Value(userIDContextKey).(string)
 
 	return userID, ok

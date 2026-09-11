@@ -9,32 +9,32 @@ import (
 	"time"
 
 	"github.com/kristopher1027/devflow-ai/internal/domain"
-	"github.com/kristopher1027/devflow-ai/internal/repository"
+	"github.com/kristopher1027/devflow-ai/internal/service"
 )
 
-type fakeAuthSessionRepository struct {
+type fakeAuthService struct {
 	session *domain.Session
 	err     error
 }
 
-func (f *fakeAuthSessionRepository) Create(
-	ctx context.Context,
-	session *domain.Session,
-) error {
-	return nil
-}
-
-func (f *fakeAuthSessionRepository) FindByTokenHash(
+func (f *fakeAuthService) AuthenticateSession(
 	ctx context.Context,
 	tokenHash string,
 ) (*domain.Session, error) {
 	return f.session, f.err
 }
 
-func TestAuthMiddlewareNoCookie(t *testing.T) {
-	repo := &fakeAuthSessionRepository{}
+func (f *fakeAuthService) Logout(
+	ctx context.Context,
+	tokenHash string,
+) error {
+	return nil
+}
 
-	middleware := NewAuthMiddleware(repo)
+func TestAuthMiddlewareNoCookie(t *testing.T) {
+	authService := &fakeAuthService{}
+
+	middleware := NewAuthMiddleware(authService)
 
 	next := http.HandlerFunc(func(
 		w http.ResponseWriter,
@@ -73,11 +73,11 @@ func TestAuthMiddlewareNoCookie(t *testing.T) {
 }
 
 func TestAuthMiddlewareInvalidSession(t *testing.T) {
-	repo := &fakeAuthSessionRepository{
-		err: repository.ErrSessionNotFound,
+	authService := &fakeAuthService{
+		err: errors.New("session not found"),
 	}
 
-	middleware := NewAuthMiddleware(repo)
+	middleware := NewAuthMiddleware(authService)
 
 	next := http.HandlerFunc(func(
 		w http.ResponseWriter,
@@ -113,11 +113,11 @@ func TestAuthMiddlewareInvalidSession(t *testing.T) {
 }
 
 func TestAuthMiddlewareRepositoryError(t *testing.T) {
-	repo := &fakeAuthSessionRepository{
+	authService := &fakeAuthService{
 		err: errors.New("database connection failed"),
 	}
 
-	middleware := NewAuthMiddleware(repo)
+	middleware := NewAuthMiddleware(authService)
 
 	next := http.HandlerFunc(func(
 		w http.ResponseWriter,
@@ -143,33 +143,29 @@ func TestAuthMiddlewareRepositoryError(t *testing.T) {
 
 	handler.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusInternalServerError {
+	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf(
 			"expected status %d, got %d",
-			http.StatusInternalServerError,
+			http.StatusUnauthorized,
 			rec.Code,
 		)
 	}
 
-	if rec.Body.String() != "internal server error\n" {
+	if rec.Body.String() != "authentication required\n" {
 		t.Fatalf(
 			"expected body %q, got %q",
-			"internal server error\n",
+			"authentication required\n",
 			rec.Body.String(),
 		)
 	}
 }
 
 func TestAuthMiddlewareExpiredSession(t *testing.T) {
-	repo := &fakeAuthSessionRepository{
-		session: &domain.Session{
-			ID:        "session-123",
-			UserID:    "user-123",
-			ExpiresAt: time.Now().Add(-time.Hour),
-		},
+	authService := &fakeAuthService{
+		err: service.ErrSessionExpired,
 	}
 
-	middleware := NewAuthMiddleware(repo)
+	middleware := NewAuthMiddleware(authService)
 
 	next := http.HandlerFunc(func(
 		w http.ResponseWriter,
@@ -213,7 +209,7 @@ func TestAuthMiddlewareExpiredSession(t *testing.T) {
 }
 
 func TestAuthMiddlewareValidSession(t *testing.T) {
-	repo := &fakeAuthSessionRepository{
+	authService := &fakeAuthService{
 		session: &domain.Session{
 			ID:        "session-123",
 			UserID:    "user-123",
@@ -221,7 +217,7 @@ func TestAuthMiddlewareValidSession(t *testing.T) {
 		},
 	}
 
-	middleware := NewAuthMiddleware(repo)
+	middleware := NewAuthMiddleware(authService)
 
 	next := http.HandlerFunc(func(
 		w http.ResponseWriter,

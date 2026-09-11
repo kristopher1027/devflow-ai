@@ -14,6 +14,13 @@ type fakeCreateSessionRepository struct {
 	createErr      error
 }
 
+func (f *fakeCreateSessionRepository) DeleteByTokenHash(
+	ctx context.Context,
+	tokenHash string,
+) error {
+	return nil
+}
+
 func (f *fakeCreateSessionRepository) Create(
 	ctx context.Context,
 	session *domain.Session,
