@@ -36,6 +36,10 @@ var (
 	ErrWorkspaceMemberAdminCannotAssignRole = errors.New(
 		"admins can only add members",
 	)
+
+	ErrWorkspaceMemberAdminCannotChangeRole = errors.New(
+		"admins cannot change member roles",
+	)
 )
 
 type WorkspaceMemberService interface {
@@ -60,6 +64,14 @@ type WorkspaceMemberService interface {
 		workspaceID string,
 	) ([]*domain.WorkspaceMember, error)
 
+	UpdateRole(
+		ctx context.Context,
+		requesterID string,
+		workspaceID string,
+		userID string,
+		role string,
+	) error
+
 	Remove(
 		ctx context.Context,
 		requesterID string,
@@ -69,7 +81,8 @@ type WorkspaceMemberService interface {
 }
 
 type WorkspaceMemberServiceImpl struct {
-	members    repository.WorkspaceMemberRepository
+	members repository.WorkspaceMemberRepository
+
 	workspaces repository.WorkspaceRepository
 }
 
@@ -77,40 +90,59 @@ func NewWorkspaceMemberService(
 	members repository.WorkspaceMemberRepository,
 	workspaces repository.WorkspaceRepository,
 ) WorkspaceMemberService {
+
 	return &WorkspaceMemberServiceImpl{
-		members:    members,
+
+		members: members,
+
 		workspaces: workspaces,
 	}
+
 }
 
-func isValidWorkspaceMemberRole(role string) bool {
+func isValidWorkspaceMemberRole(
+	role string,
+) bool {
+
 	switch role {
+
 	case WorkspaceMemberRoleOwner,
 		WorkspaceMemberRoleAdmin,
 		WorkspaceMemberRoleMember:
+
 		return true
+
 	default:
+
 		return false
 	}
-}
 
+}
 func (s *WorkspaceMemberServiceImpl) authorizeManager(
 	ctx context.Context,
 	requesterID string,
 	workspaceID string,
 ) (*domain.Workspace, *domain.WorkspaceMember, error) {
-	workspace, err := s.workspaces.FindByID(ctx, workspaceID)
+
+	workspace, err := s.workspaces.FindByID(
+		ctx,
+		workspaceID,
+	)
+
 	if err != nil {
 		return nil, nil, err
 	}
 
-	// The workspace owner always has management permission.
+	// Workspace owner automatically has permission.
 	if workspace.OwnerID == requesterID {
-		return workspace, &domain.WorkspaceMember{
-			WorkspaceID: workspaceID,
-			UserID:      requesterID,
-			Role:        WorkspaceMemberRoleOwner,
-		}, nil
+
+		return workspace,
+			&domain.WorkspaceMember{
+				WorkspaceID: workspaceID,
+				UserID:      requesterID,
+				Role:        WorkspaceMemberRoleOwner,
+			},
+			nil
 	}
 
 	member, err := s.members.Find(
@@ -118,16 +150,25 @@ func (s *WorkspaceMemberServiceImpl) authorizeManager(
 		workspaceID,
 		requesterID,
 	)
+
 	if err != nil {
-		if errors.Is(err, repository.ErrWorkspaceMemberNotFound) {
-			return nil, nil, ErrWorkspaceMemberUnauthorized
+
+		if errors.Is(
+			err,
+			repository.ErrWorkspaceMemberNotFound,
+		) {
+
+			return nil, nil,
+				ErrWorkspaceMemberUnauthorized
 		}
 
 		return nil, nil, err
 	}
 
 	if member.Role != WorkspaceMemberRoleAdmin {
-		return nil, nil, ErrWorkspaceMemberUnauthorized
+
+		return nil, nil,
+			ErrWorkspaceMemberUnauthorized
 	}
 
 	return workspace, member, nil
@@ -140,41 +181,59 @@ func (s *WorkspaceMemberServiceImpl) Add(
 	userID string,
 	role string,
 ) (*domain.WorkspaceMember, error) {
+
 	role = strings.TrimSpace(role)
 
 	if role == "" {
-		return nil, ErrWorkspaceMemberRoleRequired
+
+		return nil,
+			ErrWorkspaceMemberRoleRequired
 	}
 
 	if !isValidWorkspaceMemberRole(role) {
-		return nil, ErrInvalidWorkspaceMemberRole
+
+		return nil,
+			ErrInvalidWorkspaceMemberRole
 	}
 
-	_, requester, err := s.authorizeManager(
-		ctx,
-		requesterID,
-		workspaceID,
-	)
+	_, requester, err :=
+		s.authorizeManager(
+			ctx,
+			requesterID,
+			workspaceID,
+		)
+
 	if err != nil {
+
 		return nil, err
 	}
 
-	// Admins may only add regular members.
+	// Admins cannot create admins or owners.
 	if requester.Role == WorkspaceMemberRoleAdmin &&
 		role != WorkspaceMemberRoleMember {
-		return nil, ErrWorkspaceMemberAdminCannotAssignRole
-	}
 
-	now := time.Now()
+		return nil,
+			ErrWorkspaceMemberAdminCannotAssignRole
+	}
 
 	member := &domain.WorkspaceMember{
+
 		WorkspaceID: workspaceID,
-		UserID:      userID,
-		Role:        role,
-		CreatedAt:   now,
+
+		UserID: userID,
+
+		Role: role,
+
+		CreatedAt: time.Now(),
 	}
 
-	if err := s.members.Create(ctx, member); err != nil {
+	err = s.members.Create(
+		ctx,
+		member,
+	)
+
+	if err != nil {
+
 		return nil, err
 	}
 
@@ -187,12 +246,16 @@ func (s *WorkspaceMemberServiceImpl) Find(
 	workspaceID string,
 	userID string,
 ) (*domain.WorkspaceMember, error) {
-	_, _, err := s.authorizeManager(
-		ctx,
-		requesterID,
-		workspaceID,
-	)
+
+	_, _, err :=
+		s.authorizeManager(
+			ctx,
+			requesterID,
+			workspaceID,
+		)
+
 	if err != nil {
+
 		return nil, err
 	}
 
@@ -201,6 +264,7 @@ func (s *WorkspaceMemberServiceImpl) Find(
 		workspaceID,
 		userID,
 	)
+
 }
 
 func (s *WorkspaceMemberServiceImpl) ListByWorkspaceID(
@@ -208,12 +272,16 @@ func (s *WorkspaceMemberServiceImpl) ListByWorkspaceID(
 	requesterID string,
 	workspaceID string,
 ) ([]*domain.WorkspaceMember, error) {
-	_, _, err := s.authorizeManager(
-		ctx,
-		requesterID,
-		workspaceID,
-	)
+
+	_, _, err :=
+		s.authorizeManager(
+			ctx,
+			requesterID,
+			workspaceID,
+		)
+
 	if err != nil {
+
 		return nil, err
 	}
 
@@ -221,6 +289,82 @@ func (s *WorkspaceMemberServiceImpl) ListByWorkspaceID(
 		ctx,
 		workspaceID,
 	)
+
+}
+
+func (s *WorkspaceMemberServiceImpl) UpdateRole(
+	ctx context.Context,
+	requesterID string,
+	workspaceID string,
+	userID string,
+	role string,
+) error {
+
+	role = strings.TrimSpace(role)
+
+	if role == "" {
+
+		return ErrWorkspaceMemberRoleRequired
+	}
+
+	if !isValidWorkspaceMemberRole(role) {
+
+		return ErrInvalidWorkspaceMemberRole
+	}
+
+	workspace, requester, err :=
+		s.authorizeManager(
+			ctx,
+			requesterID,
+			workspaceID,
+		)
+
+	if err != nil {
+
+		return err
+	}
+
+	// Owner role cannot be changed.
+	if userID == workspace.OwnerID {
+
+		return ErrWorkspaceOwnerCannotBeRemoved
+	}
+
+	target, err :=
+		s.members.Find(
+			ctx,
+			workspaceID,
+			userID,
+		)
+
+	if err != nil {
+
+		return err
+	}
+
+	// Admin restrictions.
+	if requester.Role == WorkspaceMemberRoleAdmin {
+
+		// Admin cannot promote.
+		if role != WorkspaceMemberRoleMember {
+
+			return ErrWorkspaceMemberAdminCannotChangeRole
+		}
+
+		// Admin cannot modify another admin.
+		if target.Role == WorkspaceMemberRoleAdmin {
+
+			return ErrWorkspaceMemberAdminCannotChangeRole
+		}
+	}
+
+	return s.members.UpdateRole(
+		ctx,
+		workspaceID,
+		userID,
+		role,
+	)
+
 }
 
 func (s *WorkspaceMemberServiceImpl) Remove(
@@ -229,34 +373,45 @@ func (s *WorkspaceMemberServiceImpl) Remove(
 	workspaceID string,
 	userID string,
 ) error {
-	workspace, requester, err := s.authorizeManager(
-		ctx,
-		requesterID,
-		workspaceID,
-	)
+
+	workspace, requester, err :=
+		s.authorizeManager(
+			ctx,
+			requesterID,
+			workspaceID,
+		)
+
 	if err != nil {
+
 		return err
 	}
 
-	// Never allow the workspace owner to be removed.
+	// Owner can never be removed.
 	if userID == workspace.OwnerID {
+
 		return ErrWorkspaceOwnerCannotBeRemoved
 	}
 
-	// Admins can remove members, but not other admins.
 	if requester.Role == WorkspaceMemberRoleAdmin {
-		member, err := s.members.Find(
-			ctx,
-			workspaceID,
-			userID,
-		)
+
+		member, err :=
+			s.members.Find(
+				ctx,
+				workspaceID,
+				userID,
+			)
+
 		if err != nil {
+
 			return err
 		}
 
+		// Admin can remove only normal members.
 		if member.Role != WorkspaceMemberRoleMember {
+
 			return ErrWorkspaceMemberUnauthorized
 		}
+
 	}
 
 	return s.members.Delete(
@@ -264,4 +419,5 @@ func (s *WorkspaceMemberServiceImpl) Remove(
 		workspaceID,
 		userID,
 	)
+
 }

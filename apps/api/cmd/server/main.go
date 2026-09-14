@@ -72,12 +72,20 @@ func main() {
 	)
 
 	// Workspace
-	workspaceService := service.NewWorkspaceServiceWithMembers(
+	workspaceService := service.NewWorkspaceService(
 		workspaceRepository,
-		workspaceMemberRepository,
 	)
 	workspaceHandler := devflowhttp.NewWorkspaceHandler(
 		workspaceService,
+	)
+
+	// Workspace members
+	workspaceMemberService := service.NewWorkspaceMemberService(
+		workspaceMemberRepository,
+		workspaceRepository,
+	)
+	workspaceMemberHandler := devflowhttp.NewWorkspaceMemberHandler(
+		workspaceMemberService,
 	)
 
 	// Router
@@ -86,6 +94,7 @@ func main() {
 		registrationHandler,
 		loginHandler,
 		workspaceHandler,
+		workspaceMemberHandler,
 		authMiddleware,
 	)
 

@@ -65,6 +65,27 @@ func (f *fakeWorkspaceMemberRepository) ListByWorkspaceID(
 	return f.members, nil
 }
 
+func (f *fakeWorkspaceMemberRepository) UpdateRole(
+	ctx context.Context,
+	workspaceID string,
+	userID string,
+	role string,
+) error {
+	f.gotWorkspaceID = workspaceID
+	f.gotUserID = userID
+	f.gotRole = role
+
+	if f.err != nil {
+		return f.err
+	}
+
+	if f.member != nil {
+		f.member.Role = role
+	}
+
+	return nil
+}
+
 func (f *fakeWorkspaceMemberRepository) Delete(
 	ctx context.Context,
 	workspaceID string,
@@ -171,6 +192,7 @@ func newWorkspaceMemberService(
 
 func TestWorkspaceMemberServiceAddOwner(t *testing.T) {
 	memberRepo := &fakeWorkspaceMemberRepository{}
+
 	workspaceRepo := &fakeWorkspaceRepository{
 		workspace: testWorkspace(),
 	}
@@ -187,6 +209,7 @@ func TestWorkspaceMemberServiceAddOwner(t *testing.T) {
 		"user-123",
 		WorkspaceMemberRoleMember,
 	)
+
 	if err != nil {
 		t.Fatalf("add member as owner: %v", err)
 	}
@@ -248,6 +271,7 @@ func TestWorkspaceMemberServiceAddAdmin(t *testing.T) {
 		"user-123",
 		WorkspaceMemberRoleMember,
 	)
+
 	if err != nil {
 		t.Fatalf("add member as admin: %v", err)
 	}
@@ -260,7 +284,6 @@ func TestWorkspaceMemberServiceAddAdmin(t *testing.T) {
 		)
 	}
 }
-
 func TestWorkspaceMemberServiceAdminCannotAddAdmin(t *testing.T) {
 	memberRepo := &fakeWorkspaceMemberRepository{
 		member: &domain.WorkspaceMember{
@@ -398,6 +421,7 @@ func TestWorkspaceMemberServiceNonMemberCannotAddMember(t *testing.T) {
 
 func TestWorkspaceMemberServiceAddEmptyRole(t *testing.T) {
 	memberRepo := &fakeWorkspaceMemberRepository{}
+
 	workspaceRepo := &fakeWorkspaceRepository{
 		workspace: testWorkspace(),
 	}
@@ -425,6 +449,7 @@ func TestWorkspaceMemberServiceAddEmptyRole(t *testing.T) {
 
 func TestWorkspaceMemberServiceAddInvalidRole(t *testing.T) {
 	memberRepo := &fakeWorkspaceMemberRepository{}
+
 	workspaceRepo := &fakeWorkspaceRepository{
 		workspace: testWorkspace(),
 	}
@@ -452,6 +477,7 @@ func TestWorkspaceMemberServiceAddInvalidRole(t *testing.T) {
 
 func TestWorkspaceMemberServiceAddTrimsRole(t *testing.T) {
 	memberRepo := &fakeWorkspaceMemberRepository{}
+
 	workspaceRepo := &fakeWorkspaceRepository{
 		workspace: testWorkspace(),
 	}
@@ -468,6 +494,7 @@ func TestWorkspaceMemberServiceAddTrimsRole(t *testing.T) {
 		"user-123",
 		"  admin  ",
 	)
+
 	if err != nil {
 		t.Fatalf("add member: %v", err)
 	}
@@ -540,6 +567,7 @@ func TestWorkspaceMemberServiceFindOwner(t *testing.T) {
 		"workspace-123",
 		"user-123",
 	)
+
 	if err != nil {
 		t.Fatalf("find member as owner: %v", err)
 	}
@@ -550,13 +578,6 @@ func TestWorkspaceMemberServiceFindOwner(t *testing.T) {
 }
 
 func TestWorkspaceMemberServiceFindAdmin(t *testing.T) {
-	target := &domain.WorkspaceMember{
-		WorkspaceID: "workspace-123",
-		UserID:      "member-123",
-		Role:        WorkspaceMemberRoleMember,
-		CreatedAt:   time.Now(),
-	}
-
 	memberRepo := &fakeWorkspaceMemberRepository{
 		member: &domain.WorkspaceMember{
 			WorkspaceID: "workspace-123",
@@ -575,18 +596,6 @@ func TestWorkspaceMemberServiceFindAdmin(t *testing.T) {
 		workspaceRepo,
 	)
 
-	memberRepo.member = target
-
-	// The fake repository can only return one member. The authorization
-	// lookup must therefore be tested separately from the target lookup.
-	// This test verifies that an admin is accepted as a manager.
-	memberRepo.member = &domain.WorkspaceMember{
-		WorkspaceID: "workspace-123",
-		UserID:      "admin-123",
-		Role:        WorkspaceMemberRoleAdmin,
-		CreatedAt:   time.Now(),
-	}
-
 	_, err := service.Find(
 		context.Background(),
 		"admin-123",
@@ -595,10 +604,9 @@ func TestWorkspaceMemberServiceFindAdmin(t *testing.T) {
 	)
 
 	if err != nil {
-		t.Fatalf("expected admin to be authorized, got %v", err)
+		t.Fatalf("expected admin authorization, got %v", err)
 	}
 }
-
 func TestWorkspaceMemberServiceFindMemberUnauthorized(t *testing.T) {
 	memberRepo := &fakeWorkspaceMemberRepository{
 		member: &domain.WorkspaceMember{
@@ -636,23 +644,21 @@ func TestWorkspaceMemberServiceFindMemberUnauthorized(t *testing.T) {
 func TestWorkspaceMemberServiceListOwner(t *testing.T) {
 	now := time.Now()
 
-	members := []*domain.WorkspaceMember{
-		{
-			WorkspaceID: "workspace-123",
-			UserID:      "owner-123",
-			Role:        WorkspaceMemberRoleOwner,
-			CreatedAt:   now,
-		},
-		{
-			WorkspaceID: "workspace-123",
-			UserID:      "member-123",
-			Role:        WorkspaceMemberRoleMember,
-			CreatedAt:   now,
-		},
-	}
-
 	memberRepo := &fakeWorkspaceMemberRepository{
-		members: members,
+		members: []*domain.WorkspaceMember{
+			{
+				WorkspaceID: "workspace-123",
+				UserID:      "owner-123",
+				Role:        WorkspaceMemberRoleOwner,
+				CreatedAt:   now,
+			},
+			{
+				WorkspaceID: "workspace-123",
+				UserID:      "member-123",
+				Role:        WorkspaceMemberRoleMember,
+				CreatedAt:   now,
+			},
+		},
 	}
 
 	workspaceRepo := &fakeWorkspaceRepository{
@@ -669,6 +675,7 @@ func TestWorkspaceMemberServiceListOwner(t *testing.T) {
 		"owner-123",
 		"workspace-123",
 	)
+
 	if err != nil {
 		t.Fatalf("list members as owner: %v", err)
 	}
@@ -721,6 +728,7 @@ func TestWorkspaceMemberServiceListAdmin(t *testing.T) {
 		"admin-123",
 		"workspace-123",
 	)
+
 	if err != nil {
 		t.Fatalf("list members as admin: %v", err)
 	}
@@ -811,8 +819,12 @@ func TestWorkspaceMemberServiceRemoveOwnerRemovesMember(t *testing.T) {
 		"workspace-123",
 		"member-123",
 	)
+
 	if err != nil {
-		t.Fatalf("remove member as owner: %v", err)
+		t.Fatalf(
+			"remove member as owner: %v",
+			err,
+		)
 	}
 
 	if memberRepo.gotWorkspaceID != "workspace-123" {
@@ -827,41 +839,6 @@ func TestWorkspaceMemberServiceRemoveOwnerRemovesMember(t *testing.T) {
 			"expected user ID member-123, got %s",
 			memberRepo.gotUserID,
 		)
-	}
-}
-
-func TestWorkspaceMemberServiceAdminRemovesMember(t *testing.T) {
-	memberRepo := &fakeWorkspaceMemberRepository{
-		member: &domain.WorkspaceMember{
-			WorkspaceID: "workspace-123",
-			UserID:      "member-123",
-			Role:        WorkspaceMemberRoleMember,
-			CreatedAt:   time.Now(),
-		},
-	}
-
-	workspaceRepo := &fakeWorkspaceRepository{
-		workspace: testWorkspace(),
-	}
-
-	service := newWorkspaceMemberService(
-		memberRepo,
-		workspaceRepo,
-	)
-
-	err := service.Remove(
-		context.Background(),
-		"admin-123",
-		"workspace-123",
-		"member-123",
-	)
-
-	// The fake returns member-123 as the requester too, so this test needs
-	// a repository capable of distinguishing requester and target.
-	// The service behavior is covered by the dedicated authorization tests
-	// below; this assertion ensures the target removal path is exercised.
-	if err == nil {
-		t.Fatal("expected authorization error with the current fake member")
 	}
 }
 
@@ -963,12 +940,10 @@ func TestWorkspaceMemberServiceNonMemberCannotRemoveMember(t *testing.T) {
 }
 
 func TestWorkspaceMemberServiceFindWorkspaceNotFound(t *testing.T) {
-	expectedErr := repository.ErrWorkspaceNotFound
-
 	memberRepo := &fakeWorkspaceMemberRepository{}
 
 	workspaceRepo := &fakeWorkspaceRepository{
-		err: expectedErr,
+		err: repository.ErrWorkspaceNotFound,
 	}
 
 	service := newWorkspaceMemberService(
@@ -983,7 +958,7 @@ func TestWorkspaceMemberServiceFindWorkspaceNotFound(t *testing.T) {
 		"user-123",
 	)
 
-	if !errors.Is(err, expectedErr) {
+	if !errors.Is(err, repository.ErrWorkspaceNotFound) {
 		t.Fatalf(
 			"expected ErrWorkspaceNotFound, got %v",
 			err,
@@ -1031,12 +1006,6 @@ func TestWorkspaceMemberServiceRemoveRepositoryError(t *testing.T) {
 	expectedErr := errors.New("repository error")
 
 	memberRepo := &fakeWorkspaceMemberRepository{
-		member: &domain.WorkspaceMember{
-			WorkspaceID: "workspace-123",
-			UserID:      "member-123",
-			Role:        WorkspaceMemberRoleMember,
-			CreatedAt:   time.Now(),
-		},
 		err: expectedErr,
 	}
 
