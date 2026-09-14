@@ -53,6 +53,9 @@ func NewRouter(
 	protectedRemoveWorkspaceMember := authMiddleware.RequireAuth(
 		http.HandlerFunc(workspaceMemberHandler.Remove),
 	)
+	protectedUpdateWorkspaceMemberRole := authMiddleware.RequireAuth(
+		http.HandlerFunc(workspaceMemberHandler.UpdateRole),
+	)
 
 	mux.Handle("/workspaces", http.HandlerFunc(func(
 		w http.ResponseWriter,
@@ -81,6 +84,9 @@ func NewRouter(
 		path := r.URL.Path
 
 		switch {
+		case containsMemberPath(path) &&
+			r.Method == http.MethodPatch:
+			protectedUpdateWorkspaceMemberRole.ServeHTTP(w, r)
 		case hasSuffix(path, "/members") &&
 			r.Method == http.MethodPost:
 			protectedAddWorkspaceMember.ServeHTTP(w, r)
@@ -88,6 +94,10 @@ func NewRouter(
 		case hasSuffix(path, "/members") &&
 			r.Method == http.MethodGet:
 			protectedListWorkspaceMembers.ServeHTTP(w, r)
+
+		case containsMemberPath(path) &&
+			r.Method == http.MethodPatch:
+			protectedUpdateWorkspaceMemberRole.ServeHTTP(w, r)
 
 		case containsMemberPath(path) &&
 			r.Method == http.MethodGet:

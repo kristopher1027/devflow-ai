@@ -930,3 +930,150 @@ func TestWorkspaceMemberHandlerRemoveInternalError(t *testing.T) {
 		)
 	}
 }
+
+func TestWorkspaceMemberHandlerUpdateRole(t *testing.T) {
+
+	member := &domain.WorkspaceMember{
+		WorkspaceID: "workspace-123",
+		UserID:      "user-member",
+		Role:        service.WorkspaceMemberRoleMember,
+	}
+
+	memberService := &fakeWorkspaceMemberService{
+		member: member,
+	}
+
+	handler := NewWorkspaceMemberHandler(memberService)
+
+	req := authenticatedRequest(
+		http.MethodPatch,
+		"/workspaces/workspace-123/members/user-member",
+		`{"role":"admin"}`,
+		"user-owner",
+	)
+
+	rec := httptest.NewRecorder()
+
+	handler.UpdateRole(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusNoContent,
+			rec.Code,
+		)
+	}
+
+	if memberService.gotRequesterID != "user-owner" {
+		t.Fatalf(
+			"expected requester ID %q, got %q",
+			"user-owner",
+			memberService.gotRequesterID,
+		)
+	}
+
+	if memberService.gotWorkspaceID != "workspace-123" {
+		t.Fatalf(
+			"expected workspace ID %q, got %q",
+			"workspace-123",
+			memberService.gotWorkspaceID,
+		)
+	}
+
+	if memberService.gotUserID != "user-member" {
+		t.Fatalf(
+			"expected user ID %q, got %q",
+			"user-member",
+			memberService.gotUserID,
+		)
+	}
+
+	if memberService.gotRole != "admin" {
+		t.Fatalf(
+			"expected role %q, got %q",
+			"admin",
+			memberService.gotRole,
+		)
+	}
+}
+func TestWorkspaceMemberHandlerUpdateRoleRequiresAuth(t *testing.T) {
+
+	memberService := &fakeWorkspaceMemberService{}
+
+	handler := NewWorkspaceMemberHandler(memberService)
+
+	req := httptest.NewRequest(
+		http.MethodPatch,
+		"/workspaces/workspace-123/members/user-member",
+		strings.NewReader(
+			`{"role":"admin"}`,
+		),
+	)
+
+	rec := httptest.NewRecorder()
+
+	handler.UpdateRole(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusUnauthorized,
+			rec.Code,
+		)
+	}
+}
+
+func TestWorkspaceMemberHandlerUpdateRoleInvalidRole(t *testing.T) {
+
+	memberService := &fakeWorkspaceMemberService{
+		err: service.ErrInvalidWorkspaceMemberRole,
+	}
+
+	handler := NewWorkspaceMemberHandler(memberService)
+
+	req := authenticatedRequest(
+		http.MethodPatch,
+		"/workspaces/workspace-123/members/user-member",
+		`{"role":"superadmin"}`,
+		"user-owner",
+	)
+
+	rec := httptest.NewRecorder()
+
+	handler.UpdateRole(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusBadRequest,
+			rec.Code,
+		)
+	}
+}
+func TestWorkspaceMemberHandlerUpdateRoleUnauthorized(t *testing.T) {
+
+	memberService := &fakeWorkspaceMemberService{
+		err: service.ErrWorkspaceMemberUnauthorized,
+	}
+
+	handler := NewWorkspaceMemberHandler(memberService)
+
+	req := authenticatedRequest(
+		http.MethodPatch,
+		"/workspaces/workspace-123/members/user-member",
+		`{"role":"admin"}`,
+		"user-member",
+	)
+
+	rec := httptest.NewRecorder()
+
+	handler.UpdateRole(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusForbidden,
+			rec.Code,
+		)
+	}
+}

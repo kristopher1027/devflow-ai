@@ -6,7 +6,7 @@ services:
 
     environment:
       POSTGRES_USER: devflow
-      POSTGRES_PASSWORD: devflow_dev_password
+      POSTGRES_PASSWORD: devflowpassword
       POSTGRES_DB: devflow
 
     ports:

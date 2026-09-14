@@ -407,3 +407,125 @@ func writeJSON(
 
 	_ = json.NewEncoder(w).Encode(value)
 }
+func (h *WorkspaceMemberHandler) UpdateRole(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+
+	ctx := r.Context()
+
+	requesterID, ok := UserIDFromContext(ctx)
+	if !ok {
+		http.Error(
+			w,
+			"unauthorized",
+			http.StatusUnauthorized,
+		)
+		return
+	}
+
+	workspaceID, userID := workspaceMemberPathIDs(r)
+
+if workspaceID == "" || userID == "" {
+	http.Error(
+		w,
+		"workspace ID and user ID are required",
+		http.StatusBadRequest,
+	)
+	return
+}
+
+	var request struct {
+		Role string `json:"role"`
+	}
+
+	err := json.NewDecoder(r.Body).Decode(&request)
+
+	if err != nil {
+		http.Error(
+			w,
+			"invalid request body",
+			http.StatusBadRequest,
+		)
+		return
+	}
+
+
+	err = h.service.UpdateRole(
+		ctx,
+		requesterID,
+		workspaceID,
+		userID,
+		request.Role,
+	)
+
+	if err != nil {
+
+		switch {
+
+		case errors.Is(
+			err,
+			service.ErrWorkspaceMemberUnauthorized,
+		):
+			http.Error(
+				w,
+				err.Error(),
+				http.StatusForbidden,
+			)
+
+		case errors.Is(
+			err,
+			service.ErrInvalidWorkspaceMemberRole,
+		),
+			errors.Is(
+				err,
+				service.ErrWorkspaceMemberRoleRequired,
+			):
+			http.Error(
+				w,
+				err.Error(),
+				http.StatusBadRequest,
+			)
+
+		case errors.Is(
+			err,
+			repository.ErrWorkspaceNotFound,
+		),
+			errors.Is(
+				err,
+				repository.ErrWorkspaceMemberNotFound,
+			):
+			http.Error(
+				w,
+				err.Error(),
+				http.StatusNotFound,
+			)
+
+		case errors.Is(
+			err,
+			service.ErrWorkspaceMemberAdminCannotChangeRole,
+		),
+			errors.Is(
+				err,
+				service.ErrWorkspaceOwnerCannotBeRemoved,
+			):
+			http.Error(
+				w,
+				err.Error(),
+				http.StatusForbidden,
+			)
+
+		default:
+			http.Error(
+				w,
+				"internal server error",
+				http.StatusInternalServerError,
+			)
+		}
+
+		return
+	}
+
+
+	w.WriteHeader(http.StatusNoContent)
+}
