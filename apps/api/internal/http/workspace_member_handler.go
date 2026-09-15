@@ -426,14 +426,14 @@ func (h *WorkspaceMemberHandler) UpdateRole(
 
 	workspaceID, userID := workspaceMemberPathIDs(r)
 
-if workspaceID == "" || userID == "" {
-	http.Error(
-		w,
-		"workspace ID and user ID are required",
-		http.StatusBadRequest,
-	)
-	return
-}
+	if workspaceID == "" || userID == "" {
+		http.Error(
+			w,
+			"workspace ID and user ID are required",
+			http.StatusBadRequest,
+		)
+		return
+	}
 
 	var request struct {
 		Role string `json:"role"`
@@ -449,7 +449,6 @@ if workspaceID == "" || userID == "" {
 		)
 		return
 	}
-
 
 	err = h.service.UpdateRole(
 		ctx,
@@ -525,7 +524,6 @@ if workspaceID == "" || userID == "" {
 
 		return
 	}
-
 
 	w.WriteHeader(http.StatusNoContent)
 }

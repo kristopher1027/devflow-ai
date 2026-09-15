@@ -264,3 +264,20 @@ func TestAuthMiddlewareValidSession(t *testing.T) {
 		)
 	}
 }
+
+func TestUserIDFromContextMissing(t *testing.T) {
+	ctx := context.Background()
+
+	userID, ok := UserIDFromContext(ctx)
+
+	if ok {
+		t.Fatal("expected user ID lookup to fail")
+	}
+
+	if userID != "" {
+		t.Fatalf(
+			"expected empty user ID, got %q",
+			userID,
+		)
+	}
+}

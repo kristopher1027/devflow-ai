@@ -13,7 +13,10 @@ import (
 type fakeWorkspaceMemberRepository struct {
 	member  *domain.WorkspaceMember
 	members []*domain.WorkspaceMember
-	err     error
+
+	membersByUserID map[string]*domain.WorkspaceMember
+
+	err error
 
 	gotWorkspaceID string
 	gotUserID      string
@@ -49,6 +52,15 @@ func (f *fakeWorkspaceMemberRepository) Find(
 		return nil, f.err
 	}
 
+	if f.membersByUserID != nil {
+		member, ok := f.membersByUserID[userID]
+		if !ok {
+			return nil, repository.ErrWorkspaceMemberNotFound
+		}
+
+		return member, nil
+	}
+
 	return f.member, nil
 }
 
@@ -63,6 +75,385 @@ func (f *fakeWorkspaceMemberRepository) ListByWorkspaceID(
 	}
 
 	return f.members, nil
+}
+
+func TestWorkspaceMemberServiceUpdateRoleOwnerPromotesMember(t *testing.T) {
+	memberRepo := &fakeWorkspaceMemberRepository{
+		member: &domain.WorkspaceMember{
+			WorkspaceID: "workspace-123",
+			UserID:      "member-123",
+			Role:        WorkspaceMemberRoleMember,
+			CreatedAt:   time.Now(),
+		},
+	}
+
+	workspaceRepo := &fakeWorkspaceRepository{
+		workspace: testWorkspace(),
+	}
+
+	service := newWorkspaceMemberService(
+		memberRepo,
+		workspaceRepo,
+	)
+
+	err := service.UpdateRole(
+		context.Background(),
+		"owner-123",
+		"workspace-123",
+		"member-123",
+		WorkspaceMemberRoleAdmin,
+	)
+
+	if err != nil {
+		t.Fatalf("update member role as owner: %v", err)
+	}
+
+	if memberRepo.gotWorkspaceID != "workspace-123" {
+		t.Fatalf(
+			"expected workspace ID workspace-123, got %s",
+			memberRepo.gotWorkspaceID,
+		)
+	}
+
+	if memberRepo.gotUserID != "member-123" {
+		t.Fatalf(
+			"expected user ID member-123, got %s",
+			memberRepo.gotUserID,
+		)
+	}
+
+	if memberRepo.gotRole != WorkspaceMemberRoleAdmin {
+		t.Fatalf(
+			"expected role %s, got %s",
+			WorkspaceMemberRoleAdmin,
+			memberRepo.gotRole,
+		)
+	}
+
+	if memberRepo.member.Role != WorkspaceMemberRoleAdmin {
+		t.Fatalf(
+			"expected member role %s, got %s",
+			WorkspaceMemberRoleAdmin,
+			memberRepo.member.Role,
+		)
+	}
+}
+
+func TestWorkspaceMemberServiceUpdateRoleOwnerCannotChangeOwner(t *testing.T) {
+	memberRepo := &fakeWorkspaceMemberRepository{}
+
+	workspaceRepo := &fakeWorkspaceRepository{
+		workspace: testWorkspace(),
+	}
+
+	service := newWorkspaceMemberService(
+		memberRepo,
+		workspaceRepo,
+	)
+
+	err := service.UpdateRole(
+		context.Background(),
+		"owner-123",
+		"workspace-123",
+		"owner-123",
+		WorkspaceMemberRoleAdmin,
+	)
+
+	if !errors.Is(err, ErrWorkspaceOwnerCannotBeRemoved) {
+		t.Fatalf(
+			"expected ErrWorkspaceOwnerCannotBeRemoved, got %v",
+			err,
+		)
+	}
+}
+
+func TestWorkspaceMemberServiceUpdateRoleAdminCanChangeMemberToMember(t *testing.T) {
+	memberRepo := &fakeWorkspaceMemberRepository{
+		membersByUserID: map[string]*domain.WorkspaceMember{
+			"admin-123": {
+				WorkspaceID: "workspace-123",
+				UserID:      "admin-123",
+				Role:        WorkspaceMemberRoleAdmin,
+				CreatedAt:   time.Now(),
+			},
+			"member-123": {
+				WorkspaceID: "workspace-123",
+				UserID:      "member-123",
+				Role:        WorkspaceMemberRoleMember,
+				CreatedAt:   time.Now(),
+			},
+		},
+	}
+
+	workspaceRepo := &fakeWorkspaceRepository{
+		workspace: testWorkspace(),
+	}
+
+	service := newWorkspaceMemberService(
+		memberRepo,
+		workspaceRepo,
+	)
+
+	err := service.UpdateRole(
+		context.Background(),
+		"admin-123",
+		"workspace-123",
+		"member-123",
+		WorkspaceMemberRoleMember,
+	)
+
+	if err != nil {
+		t.Fatalf(
+			"expected admin to update member role, got %v",
+			err,
+		)
+	}
+}
+func TestWorkspaceMemberServiceUpdateRoleAdminCannotPromoteMember(t *testing.T) {
+	memberRepo := &fakeWorkspaceMemberRepository{
+		membersByUserID: map[string]*domain.WorkspaceMember{
+			"admin-123": {
+				WorkspaceID: "workspace-123",
+				UserID:      "admin-123",
+				Role:        WorkspaceMemberRoleAdmin,
+				CreatedAt:   time.Now(),
+			},
+			"member-123": {
+				WorkspaceID: "workspace-123",
+				UserID:      "member-123",
+				Role:        WorkspaceMemberRoleMember,
+				CreatedAt:   time.Now(),
+			},
+		},
+	}
+
+	workspaceRepo := &fakeWorkspaceRepository{
+		workspace: testWorkspace(),
+	}
+
+	service := newWorkspaceMemberService(
+		memberRepo,
+		workspaceRepo,
+	)
+
+	err := service.UpdateRole(
+		context.Background(),
+		"admin-123",
+		"workspace-123",
+		"member-123",
+		WorkspaceMemberRoleAdmin,
+	)
+
+	if !errors.Is(err, ErrWorkspaceMemberAdminCannotChangeRole) {
+		t.Fatalf(
+			"expected ErrWorkspaceMemberAdminCannotChangeRole, got %v",
+			err,
+		)
+	}
+}
+
+func TestWorkspaceMemberServiceUpdateRoleAdminCannotModifyAdmin(t *testing.T) {
+	memberRepo := &fakeWorkspaceMemberRepository{
+		member: &domain.WorkspaceMember{
+			WorkspaceID: "workspace-123",
+			UserID:      "another-admin-123",
+			Role:        WorkspaceMemberRoleAdmin,
+			CreatedAt:   time.Now(),
+		},
+	}
+
+	workspaceRepo := &fakeWorkspaceRepository{
+		workspace: testWorkspace(),
+	}
+
+	service := newWorkspaceMemberService(
+		memberRepo,
+		workspaceRepo,
+	)
+
+	err := service.UpdateRole(
+		context.Background(),
+		"admin-123",
+		"workspace-123",
+		"another-admin-123",
+		WorkspaceMemberRoleMember,
+	)
+
+	if !errors.Is(err, ErrWorkspaceMemberAdminCannotChangeRole) {
+		t.Fatalf(
+			"expected ErrWorkspaceMemberAdminCannotChangeRole, got %v",
+			err,
+		)
+	}
+}
+
+func TestWorkspaceMemberServiceUpdateRoleMemberUnauthorized(t *testing.T) {
+	memberRepo := &fakeWorkspaceMemberRepository{
+		member: &domain.WorkspaceMember{
+			WorkspaceID: "workspace-123",
+			UserID:      "member-123",
+			Role:        WorkspaceMemberRoleMember,
+			CreatedAt:   time.Now(),
+		},
+	}
+
+	workspaceRepo := &fakeWorkspaceRepository{
+		workspace: testWorkspace(),
+	}
+
+	service := newWorkspaceMemberService(
+		memberRepo,
+		workspaceRepo,
+	)
+
+	err := service.UpdateRole(
+		context.Background(),
+		"member-123",
+		"workspace-123",
+		"another-member-123",
+		WorkspaceMemberRoleMember,
+	)
+
+	if !errors.Is(err, ErrWorkspaceMemberUnauthorized) {
+		t.Fatalf(
+			"expected ErrWorkspaceMemberUnauthorized, got %v",
+			err,
+		)
+	}
+}
+
+func TestWorkspaceMemberServiceUpdateRoleEmptyRole(t *testing.T) {
+	memberRepo := &fakeWorkspaceMemberRepository{}
+
+	workspaceRepo := &fakeWorkspaceRepository{
+		workspace: testWorkspace(),
+	}
+
+	service := newWorkspaceMemberService(
+		memberRepo,
+		workspaceRepo,
+	)
+
+	err := service.UpdateRole(
+		context.Background(),
+		"owner-123",
+		"workspace-123",
+		"member-123",
+		"   ",
+	)
+
+	if !errors.Is(err, ErrWorkspaceMemberRoleRequired) {
+		t.Fatalf(
+			"expected ErrWorkspaceMemberRoleRequired, got %v",
+			err,
+		)
+	}
+}
+
+func TestWorkspaceMemberServiceUpdateRoleInvalidRole(t *testing.T) {
+	memberRepo := &fakeWorkspaceMemberRepository{}
+
+	workspaceRepo := &fakeWorkspaceRepository{
+		workspace: testWorkspace(),
+	}
+
+	service := newWorkspaceMemberService(
+		memberRepo,
+		workspaceRepo,
+	)
+
+	err := service.UpdateRole(
+		context.Background(),
+		"owner-123",
+		"workspace-123",
+		"member-123",
+		"superadmin",
+	)
+
+	if !errors.Is(err, ErrInvalidWorkspaceMemberRole) {
+		t.Fatalf(
+			"expected ErrInvalidWorkspaceMemberRole, got %v",
+			err,
+		)
+	}
+}
+
+func TestWorkspaceMemberServiceUpdateRoleTrimsRole(t *testing.T) {
+	memberRepo := &fakeWorkspaceMemberRepository{
+		member: &domain.WorkspaceMember{
+			WorkspaceID: "workspace-123",
+			UserID:      "member-123",
+			Role:        WorkspaceMemberRoleMember,
+			CreatedAt:   time.Now(),
+		},
+	}
+
+	workspaceRepo := &fakeWorkspaceRepository{
+		workspace: testWorkspace(),
+	}
+
+	service := newWorkspaceMemberService(
+		memberRepo,
+		workspaceRepo,
+	)
+
+	err := service.UpdateRole(
+		context.Background(),
+		"owner-123",
+		"workspace-123",
+		"member-123",
+		"  admin  ",
+	)
+
+	if err != nil {
+		t.Fatalf("update role: %v", err)
+	}
+
+	if memberRepo.gotRole != WorkspaceMemberRoleAdmin {
+		t.Fatalf(
+			"expected role %s, got %s",
+			WorkspaceMemberRoleAdmin,
+			memberRepo.gotRole,
+		)
+	}
+}
+
+func TestWorkspaceMemberServiceUpdateRoleRepositoryError(t *testing.T) {
+	expectedErr := errors.New("repository error")
+
+	memberRepo := &fakeWorkspaceMemberRepository{
+		member: &domain.WorkspaceMember{
+			WorkspaceID: "workspace-123",
+			UserID:      "member-123",
+			Role:        WorkspaceMemberRoleMember,
+			CreatedAt:   time.Now(),
+		},
+		err: expectedErr,
+	}
+
+	workspaceRepo := &fakeWorkspaceRepository{
+		workspace: testWorkspace(),
+	}
+
+	service := newWorkspaceMemberService(
+		memberRepo,
+		workspaceRepo,
+	)
+
+	err := service.UpdateRole(
+		context.Background(),
+		"owner-123",
+		"workspace-123",
+		"member-123",
+		WorkspaceMemberRoleAdmin,
+	)
+
+	if !errors.Is(err, expectedErr) {
+		t.Fatalf(
+			"expected repository error, got %v",
+			err,
+		)
+	}
 }
 
 func (f *fakeWorkspaceMemberRepository) UpdateRole(

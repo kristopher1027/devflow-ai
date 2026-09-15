@@ -95,9 +95,9 @@ func NewRouter(
 			r.Method == http.MethodGet:
 			protectedListWorkspaceMembers.ServeHTTP(w, r)
 
-		case containsMemberPath(path) &&
-			r.Method == http.MethodPatch:
-			protectedUpdateWorkspaceMemberRole.ServeHTTP(w, r)
+		// case containsMemberPath(path) &&
+		// 	r.Method == http.MethodPatch:
+		// 	protectedUpdateWorkspaceMemberRole.ServeHTTP(w, r)
 
 		case containsMemberPath(path) &&
 			r.Method == http.MethodGet:

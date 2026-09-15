@@ -72,8 +72,9 @@ func main() {
 	)
 
 	// Workspace
-	workspaceService := service.NewWorkspaceService(
+	workspaceService := service.NewWorkspaceServiceWithMembers(
 		workspaceRepository,
+		workspaceMemberRepository,
 	)
 	workspaceHandler := devflowhttp.NewWorkspaceHandler(
 		workspaceService,
