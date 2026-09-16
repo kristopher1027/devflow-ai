@@ -34,6 +34,7 @@ func main() {
 	sessionRepository := repository.NewSessionRepository(db)
 	workspaceRepository := repository.NewWorkspaceRepository(db)
 	workspaceMemberRepository := repository.NewWorkspaceMemberRepository(db)
+	projectRepository := repository.NewProjectRepository(db)
 
 	// User
 	userService := service.NewUserService(userRepository)
@@ -89,6 +90,15 @@ func main() {
 		workspaceMemberService,
 	)
 
+	// Projects
+	projectService := service.NewProjectService(
+		projectRepository,
+		workspaceMemberRepository,
+	)
+	projectHandler := devflowhttp.NewProjectHandler(
+		projectService,
+	)
+
 	// Router
 	router := devflowhttp.NewRouter(
 		userHandler,
@@ -96,6 +106,7 @@ func main() {
 		loginHandler,
 		workspaceHandler,
 		workspaceMemberHandler,
+		projectHandler,
 		authMiddleware,
 	)
 

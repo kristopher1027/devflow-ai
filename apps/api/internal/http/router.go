@@ -8,6 +8,7 @@ func NewRouter(
 	loginHandler *LoginHandler,
 	workspaceHandler *WorkspaceHandler,
 	workspaceMemberHandler *WorkspaceMemberHandler,
+	projectHandler *ProjectHandler,
 	authMiddleware *AuthMiddleware,
 ) http.Handler {
 	mux := http.NewServeMux()
@@ -56,6 +57,21 @@ func NewRouter(
 	protectedUpdateWorkspaceMemberRole := authMiddleware.RequireAuth(
 		http.HandlerFunc(workspaceMemberHandler.UpdateRole),
 	)
+	protectedCreateProject := authMiddleware.RequireAuth(
+		http.HandlerFunc(projectHandler.Create),
+	)
+
+	protectedListProjects := authMiddleware.RequireAuth(
+		http.HandlerFunc(projectHandler.ListByWorkspaceID),
+	)
+
+	protectedGetProject := authMiddleware.RequireAuth(
+		http.HandlerFunc(projectHandler.GetByID),
+	)
+
+	protectedDeleteProject := authMiddleware.RequireAuth(
+		http.HandlerFunc(projectHandler.Delete),
+	)
 
 	mux.Handle("/workspaces", http.HandlerFunc(func(
 		w http.ResponseWriter,
@@ -95,9 +111,13 @@ func NewRouter(
 			r.Method == http.MethodGet:
 			protectedListWorkspaceMembers.ServeHTTP(w, r)
 
-		// case containsMemberPath(path) &&
-		// 	r.Method == http.MethodPatch:
-		// 	protectedUpdateWorkspaceMemberRole.ServeHTTP(w, r)
+		case hasSuffix(path, "/projects") &&
+			r.Method == http.MethodPost:
+			protectedCreateProject.ServeHTTP(w, r)
+
+		case hasSuffix(path, "/projects") &&
+			r.Method == http.MethodGet:
+			protectedListProjects.ServeHTTP(w, r)
 
 		case containsMemberPath(path) &&
 			r.Method == http.MethodGet:
@@ -112,6 +132,25 @@ func NewRouter(
 
 		case r.Method == http.MethodDelete:
 			protectedDeleteWorkspace.ServeHTTP(w, r)
+
+		default:
+			http.Error(
+				w,
+				"method not allowed",
+				http.StatusMethodNotAllowed,
+			)
+		}
+	}))
+	mux.Handle("/projects/", http.HandlerFunc(func(
+		w http.ResponseWriter,
+		r *http.Request,
+	) {
+		switch r.Method {
+		case http.MethodGet:
+			protectedGetProject.ServeHTTP(w, r)
+
+		case http.MethodDelete:
+			protectedDeleteProject.ServeHTTP(w, r)
 
 		default:
 			http.Error(

@@ -179,6 +179,10 @@ func newTestRouter() http.Handler {
 		&routerFakeWorkspaceMemberService{},
 	)
 
+	projectHandler := NewProjectHandler(
+		&fakeProjectService{},
+	)
+
 	authMiddleware := NewAuthMiddleware(
 		&routerFakeAuthService{},
 	)
@@ -189,6 +193,7 @@ func newTestRouter() http.Handler {
 		loginHandler,
 		workspaceHandler,
 		workspaceMemberHandler,
+		projectHandler,
 		authMiddleware,
 	)
 }
