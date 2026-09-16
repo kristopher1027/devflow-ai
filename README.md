@@ -1,196 +1,470 @@
-[![GitHub Workflow Status (branch)](https://img.shields.io/github/actions/workflow/status/golang-migrate/migrate/ci.yaml?branch=master)](https://github.com/golang-migrate/migrate/actions/workflows/ci.yaml?query=branch%3Amaster)
-[![GoDoc](https://pkg.go.dev/badge/github.com/golang-migrate/migrate)](https://pkg.go.dev/github.com/golang-migrate/migrate/v4)
-[![Coverage Status](https://img.shields.io/coveralls/github/golang-migrate/migrate/master.svg)](https://coveralls.io/github/golang-migrate/migrate?branch=master)
-[![packagecloud.io](https://img.shields.io/badge/deb-packagecloud.io-844fec.svg)](https://packagecloud.io/golang-migrate/migrate?filter=debs)
-[![Docker Pulls](https://img.shields.io/docker/pulls/migrate/migrate.svg)](https://hub.docker.com/r/migrate/migrate/)
-![Supported Go Versions](https://img.shields.io/badge/Go-1.25%2C%201.26-lightgrey.svg)
-[![GitHub Release](https://img.shields.io/github/release/golang-migrate/migrate.svg)](https://github.com/golang-migrate/migrate/releases)
-[![Go Report Card](https://goreportcard.com/badge/github.com/golang-migrate/migrate/v4)](https://goreportcard.com/report/github.com/golang-migrate/migrate/v4)
+# DevFlow AI
 
-# migrate
+**AI-powered engineering workspace for modern software development.**
 
-__Database migrations written in Go. Use as [CLI](#cli-usage) or import as [library](#use-in-your-go-project).__
+DevFlow AI is a full-stack developer productivity platform designed to bring projects, tasks, GitHub activity, code intelligence, documentation, CI/CD insights, and AI-assisted engineering into one workspace.
 
-* Migrate reads migrations from [sources](#migration-sources)
-   and applies them in correct order to a [database](#databases).
-* Drivers are "dumb", migrate glues everything together and makes sure the logic is bulletproof.
-   (Keeps the drivers lightweight, too.)
-* Database drivers don't assume things or try to correct user input. When in doubt, fail.
-
-Forked from [mattes/migrate](https://github.com/mattes/migrate)
-
-## Databases
-
-Database drivers run migrations. [Add a new database?](database/driver.go)
-
-* [PostgreSQL](database/postgres)
-* [PGX v4](database/pgx)
-* [PGX v5](database/pgx/v5)
-* [Redshift](database/redshift)
-* [Ql](database/ql)
-* [Cassandra / ScyllaDB](database/cassandra)
-* [SQLite](database/sqlite)
-* [SQLite3](database/sqlite3) ([todo #165](https://github.com/mattes/migrate/issues/165))
-* [SQLCipher](database/sqlcipher)
-* [MySQL / MariaDB](database/mysql)
-* [Neo4j](database/neo4j)
-* [MongoDB](database/mongodb)
-* [CrateDB](database/crate) ([todo #170](https://github.com/mattes/migrate/issues/170))
-* [Shell](database/shell) ([todo #171](https://github.com/mattes/migrate/issues/171))
-* [Google Cloud Spanner](database/spanner)
-* [CockroachDB](database/cockroachdb)
-* [YugabyteDB](database/yugabytedb)
-* [ClickHouse](database/clickhouse)
-* [Firebird](database/firebird)
-* [MS SQL Server](database/sqlserver)
-* [rqlite](database/rqlite)
-
-### Database URLs
-
-Database connection strings are specified via URLs. The URL format is driver dependent but generally has the form: `dbdriver://username:password@host:port/dbname?param1=true&param2=false`
-
-Any [reserved URL characters](https://en.wikipedia.org/wiki/Percent-encoding#Percent-encoding_reserved_characters) need to be escaped. Note, the `%` character also [needs to be escaped](https://en.wikipedia.org/wiki/Percent-encoding#Percent-encoding_the_percent_character)
-
-Explicitly, the following characters need to be escaped:
-`!`, `#`, `$`, `%`, `&`, `'`, `(`, `)`, `*`, `+`, `,`, `/`, `:`, `;`, `=`, `?`, `@`, `[`, `]`
-
-It's easiest to always run the URL parts of your DB connection URL (e.g. username, password, etc) through an URL encoder. See the example Python snippets below:
-
-```bash
-$ python3 -c 'import urllib.parse; print(urllib.parse.quote(input("String to encode: "), ""))'
-String to encode: FAKEpassword!#$%&'()*+,/:;=?@[]
-FAKEpassword%21%23%24%25%26%27%28%29%2A%2B%2C%2F%3A%3B%3D%3F%40%5B%5D
-$ python2 -c 'import urllib; print urllib.quote(raw_input("String to encode: "), "")'
-String to encode: FAKEpassword!#$%&'()*+,/:;=?@[]
-FAKEpassword%21%23%24%25%26%27%28%29%2A%2B%2C%2F%3A%3B%3D%3F%40%5B%5D
-$
-```
-
-## Migration Sources
-
-Source drivers read migrations from local or remote sources. [Add a new source?](source/driver.go)
-
-* [Filesystem](source/file) - read from filesystem
-* [io/fs](source/iofs) - read from a Go [io/fs](https://pkg.go.dev/io/fs#FS)
-* [Go-Bindata](source/go_bindata) - read from embedded binary data ([jteeuwen/go-bindata](https://github.com/jteeuwen/go-bindata))
-* [pkger](source/pkger) - read from embedded binary data ([markbates/pkger](https://github.com/markbates/pkger))
-* [GitHub](source/github) - read from remote GitHub repositories
-* [GitHub Enterprise](source/github_ee) - read from remote GitHub Enterprise repositories
-* [Bitbucket](source/bitbucket) - read from remote Bitbucket repositories
-* [Gitlab](source/gitlab) - read from remote Gitlab repositories
-* [AWS S3](source/aws_s3) - read from Amazon Web Services S3
-* [Google Cloud Storage](source/google_cloud_storage) - read from Google Cloud Platform Storage
-
-## CLI usage
-
-* Simple wrapper around this library.
-* Handles ctrl+c (SIGINT) gracefully.
-* No config search paths, no config files, no magic ENV var injections.
-
-[CLI Documentation](cmd/migrate) (includes CLI install instructions)
-
-### Basic usage
-
-```bash
-$ migrate -source file://path/to/migrations -database postgres://localhost:5432/database up 2
-```
-
-### Docker usage
-
-```bash
-$ docker run -v {{ migration dir }}:/migrations --network host migrate/migrate
-    -path=/migrations/ -database postgres://localhost:5432/database up 2
-```
-
-## Use in your Go project
-
-* API is stable and frozen for this release (v3 & v4).
-* Uses [Go modules](https://golang.org/cmd/go/#hdr-Modules__module_versions__and_more) to manage dependencies.
-* To help prevent database corruptions, it supports graceful stops via `GracefulStop chan bool`.
-* Bring your own logger.
-* Uses `io.Reader` streams internally for low memory overhead.
-* Thread-safe and no goroutine leaks.
-
-__[Go Documentation](https://pkg.go.dev/github.com/golang-migrate/migrate/v4)__
-
-```go
-import (
-    "github.com/golang-migrate/migrate/v4"
-    _ "github.com/golang-migrate/migrate/v4/database/postgres"
-    _ "github.com/golang-migrate/migrate/v4/source/github"
-)
-
-func main() {
-    m, err := migrate.New(
-        "github://mattes:personal-access-token@mattes/migrate_test",
-        "postgres://localhost:5432/database?sslmode=enable")
-    m.Steps(2)
-}
-```
-
-Want to use an existing database client?
-
-```go
-import (
-    "database/sql"
-    _ "github.com/lib/pq"
-    "github.com/golang-migrate/migrate/v4"
-    "github.com/golang-migrate/migrate/v4/database/postgres"
-    _ "github.com/golang-migrate/migrate/v4/source/file"
-)
-
-func main() {
-    db, err := sql.Open("postgres", "postgres://localhost:5432/database?sslmode=enable")
-    driver, err := postgres.WithInstance(db, &postgres.Config{})
-    m, err := migrate.NewWithDatabaseInstance(
-        "file:///migrations",
-        "postgres", driver)
-    m.Up() // or m.Steps(2) if you want to explicitly set the number of migrations to run
-}
-```
-
-## Getting started
-
-Go to [getting started](GETTING_STARTED.md)
-
-## Tutorials
-
-* [CockroachDB](database/cockroachdb/TUTORIAL.md)
-* [PostgreSQL](database/postgres/TUTORIAL.md)
-
-(more tutorials to come)
-
-## Migration files
-
-Each migration has an up and down migration. [Why?](FAQ.md#why-two-separate-files-up-and-down-for-a-migration)
-
-```bash
-1481574547_create_users_table.up.sql
-1481574547_create_users_table.down.sql
-```
-
-[Best practices: How to write migrations.](MIGRATIONS.md)
-
-## Coming from another db migration tool?
-
-Check out [migradaptor](https://github.com/musinit/migradaptor/).
-*Note: migradaptor is not affiliated or supported by this project*
-
-## Versions
-
-Version | Supported? | Import | Notes
---------|------------|--------|------
-**master** | :white_check_mark: | `import "github.com/golang-migrate/migrate/v4"` | New features and bug fixes arrive here first |
-**v4** | :white_check_mark: | `import "github.com/golang-migrate/migrate/v4"` | Used for stable releases |
-**v3** | :x: | `import "github.com/golang-migrate/migrate"` (with package manager) or `import "gopkg.in/golang-migrate/migrate.v3"` (not recommended) | **DO NOT USE** - No longer supported |
-
-## Development and Contributing
-
-Yes, please! [`Makefile`](Makefile) is your friend,
-read the [development guide](CONTRIBUTING.md).
-
-Also have a look at the [FAQ](FAQ.md).
+The goal is to help developers understand and manage the complete software development lifecycle from a single platform.
 
 ---
 
-Looking for alternatives? [https://awesome-go.com/#database](https://awesome-go.com/#database).
+## 🚀 Vision
+
+Modern development workflows are spread across many tools:
+
+- GitHub for repositories, issues, and pull requests
+- Project-management tools for tasks
+- CI/CD platforms for build and deployment information
+- Documentation platforms for technical knowledge
+- AI tools for coding assistance
+- Chat applications for team communication
+
+**DevFlow AI aims to connect these pieces into one engineering workspace.**
+
+The long-term vision is for DevFlow to understand a project's:
+
+> **Code + Repository + Tasks + Issues + Pull Requests + CI/CD + Documentation + Development History**
+
+and provide useful context-aware engineering assistance.
+
+---
+
+## ✨ Planned Features
+
+### Workspace Management
+
+- Create and manage engineering workspaces
+- Workspace ownership and membership
+- Member roles and permissions
+- Secure workspace-level access control
+
+### Project & Task Management
+
+- Create and organize projects
+- Track engineering tasks
+- Task status and priorities
+- Project activity and history
+
+### GitHub Integration
+
+- Connect GitHub repositories
+- Import repositories and project information
+- View issues and pull requests
+- Track repository activity
+- Connect development activity with project tasks
+
+### Code Intelligence
+
+- Understand repository structure
+- Index source code and documentation
+- Search code using natural language
+- Retrieve relevant code context
+- Build project-aware AI context using RAG
+
+### AI Engineering Assistant
+
+DevFlow's AI assistant is intended to help developers:
+
+- Understand unfamiliar code
+- Explain errors
+- Investigate bugs
+- Suggest implementation approaches
+- Analyze technical documentation
+- Understand pull requests
+- Generate development insights
+- Answer questions about a connected codebase
+
+### CI/CD Intelligence
+
+- Monitor build failures
+- Analyze CI/CD errors
+- Connect failures to relevant code
+- Provide debugging context
+- Track deployment-related information
+
+### Observability
+
+Planned production capabilities include:
+
+- Structured logging
+- Metrics
+- Distributed tracing
+- Error tracking
+- Health checks
+- Service monitoring
+
+---
+
+## 🏗️ Architecture
+
+DevFlow is being developed using a modular full-stack architecture.
+
+```text
+┌─────────────────────────────────────────────┐
+│                 Frontend                    │
+│          Modern Web Application             │
+└──────────────────────┬──────────────────────┘
+                       │
+                       │ HTTP / REST
+                       ▼
+┌─────────────────────────────────────────────┐
+│                 Go API                      │
+│                                             │
+│  HTTP → Service → Repository → Database     │
+└──────────────────────┬──────────────────────┘
+                       │
+                       ▼
+┌─────────────────────────────────────────────┐
+│               PostgreSQL                    │
+│                                             │
+│ Users • Workspaces • Projects • Tasks       │
+└─────────────────────────────────────────────┘
+
+              External Integrations
+                       │
+          ┌────────────┼────────────┐
+          ▼            ▼            ▼
+       GitHub         AI          CI/CD
+```
+
+The backend follows a layered architecture:
+
+```text
+HTTP Handlers
+      ↓
+Services
+      ↓
+Repositories
+      ↓
+PostgreSQL
+```
+
+This separation keeps business logic independent from HTTP and database implementations, making the system easier to test, maintain, and scale.
+
+---
+
+## 🛠️ Technology Stack
+
+### Backend
+
+- **Go**
+- REST API
+- PostgreSQL
+- SQL migrations
+- Layered architecture
+- Unit and integration testing
+
+### Database
+
+- **PostgreSQL 17**
+- UUID-based identifiers
+- Database migrations
+- Foreign-key relationships
+- Transaction-safe operations
+
+### Frontend
+
+The frontend will use a modern TypeScript-based web stack and communicate with the Go API through REST APIs.
+
+### AI
+
+The AI layer is planned to incorporate:
+
+- LLM-based assistance
+- Retrieval-Augmented Generation (RAG)
+- Code and documentation indexing
+- Repository-aware context
+- Embeddings/vector search
+
+### Infrastructure
+
+Planned infrastructure includes:
+
+- Docker
+- Docker Compose
+- CI/CD
+- Structured logging
+- Metrics
+- Distributed tracing
+- Production deployment
+
+---
+
+## 📁 Project Structure
+
+The project is organized as a monorepo:
+
+```text
+devflow-ai/
+├── apps/
+│   └── api/
+│       ├── cmd/
+│       │   └── server/
+│       ├── internal/
+│       │   ├── config/
+│       │   ├── database/
+│       │   ├── domain/
+│       │   ├── http/
+│       │   ├── repository/
+│       │   ├── server/
+│       │   └── service/
+│       ├── migrations/
+│       ├── go.mod
+│       └── go.sum
+│
+├── docker-compose.yml
+├── README.md
+└── ...
+```
+
+The exact structure will evolve as additional services and frontend applications are introduced.
+
+---
+
+## 🔐 Security
+
+Security is a first-class requirement of DevFlow.
+
+The application is being designed around principles including:
+
+- Authentication and authorization
+- Workspace-level access control
+- Role-based permissions
+- Input validation
+- Secure password handling
+- SQL injection prevention
+- Secure session/token management
+- Least-privilege access
+- Secret management
+- Secure GitHub integration
+- Protection of sensitive repository data
+
+Security considerations will be incorporated throughout development rather than added after the application is completed.
+
+---
+
+## 🧪 Testing
+
+DevFlow follows a test-first approach where practical.
+
+Current backend testing includes:
+
+- Unit tests
+- Service-layer tests
+- Repository tests
+- HTTP handler tests
+- Database-backed integration tests
+
+Run the Go test suite with:
+
+```bash
+cd apps/api
+go test ./...
+```
+
+---
+
+## 🐳 Running Locally
+
+### Prerequisites
+
+Make sure you have:
+
+- Go
+- Docker
+- Docker Compose
+- PostgreSQL-compatible environment
+- Git
+
+### Clone the repository
+
+```bash
+git clone https://github.com/kristopher1027/devflow-ai.git
+cd devflow-ai
+```
+
+### Start PostgreSQL
+
+```bash
+docker compose up -d
+```
+
+### Configure environment variables
+
+Create the appropriate environment configuration for the API.
+
+Example:
+
+```env
+DATABASE_URL=postgres://devflow:devflow@localhost:5432/devflow?sslmode=disable
+PORT=8080
+```
+
+> Do not commit real credentials, API keys, tokens, or secrets to Git.
+
+### Run migrations
+
+Using the project's migration tooling:
+
+```bash
+migrate -path migrations \
+  -database "$DATABASE_URL" \
+  up
+```
+
+### Start the API
+
+```bash
+cd apps/api
+go run ./cmd/server
+```
+
+The API should be available at:
+
+```text
+http://localhost:8080
+```
+
+---
+
+## 🩺 Health Check
+
+The API provides a health endpoint for verifying that the service is running.
+
+Example response:
+
+```json
+{
+  "service": "devflow-api",
+  "status": "ok"
+}
+```
+
+---
+
+## 🗄️ Current Backend Progress
+
+DevFlow is being developed incrementally rather than generating the entire application at once.
+
+Current foundation includes:
+
+- Go API
+- PostgreSQL integration
+- Database configuration
+- Database migrations
+- User domain model
+- User repository
+- Workspace domain model
+- Workspace persistence
+- Workspace ownership
+- Workspace membership/roles
+- Service layer
+- HTTP handlers
+- Automated tests
+- Docker-based PostgreSQL development environment
+
+The next capabilities will build on this foundation.
+
+---
+
+## 🗺️ Development Roadmap
+
+DevFlow is being developed through the following stages:
+
+```text
+Requirements
+     ↓
+Product Specification
+     ↓
+System Architecture
+     ↓
+Database Schema
+     ↓
+API Design
+     ↓
+Authentication & Security
+     ↓
+Backend
+     ↓
+Frontend
+     ↓
+GitHub Integration
+     ↓
+Code Intelligence / RAG
+     ↓
+AI Assistant
+     ↓
+CI/CD Intelligence
+     ↓
+Testing
+     ↓
+Docker
+     ↓
+CI/CD
+     ↓
+Observability
+     ↓
+Deployment
+     ↓
+Documentation
+```
+
+The roadmap is intentionally incremental so that each layer can be designed, implemented, tested, and validated before introducing the next major subsystem.
+
+---
+
+## 🎯 Project Goals
+
+DevFlow AI is being built with production engineering principles in mind.
+
+### Maintainability
+
+Clear separation of concerns and modular architecture.
+
+### Scalability
+
+Architecture capable of evolving from a local development project into a multi-user engineering platform.
+
+### Security
+
+Authentication, authorization, data protection, and secure integrations are treated as core requirements.
+
+### Reliability
+
+Automated testing, database integrity, health checks, logging, and observability.
+
+### Developer Experience
+
+The platform should reduce context switching and make engineering information easier to discover.
+
+### AI-Native Engineering
+
+AI should work with the context of the actual project rather than functioning as a generic chatbot.
+
+---
+
+## 📌 Project Status
+
+**Active development**
+
+DevFlow AI is currently in the backend foundation stage. Core infrastructure and domain capabilities are being implemented incrementally before moving into the larger GitHub, frontend, code-intelligence, and AI systems.
+
+---
+
+## 📄 License
+
+License information will be added as the project approaches its first public release.
+
+---
+
+## 👨‍💻 Author
+
+**Christopher Okoh**
+
+GitHub:
+
+`https://github.com/kristopher1027`
+
+---
+
+> DevFlow AI is being built as an industry-grade software engineering project focused on combining developer productivity, project intelligence, GitHub integration, and AI-assisted software engineering into one platform.
