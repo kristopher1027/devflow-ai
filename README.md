@@ -259,7 +259,7 @@ Run the Go test suite with:
 
 ```bash
 cd apps/api
-go test ./...
+DATABASE_URL=postgres://devflow:devflowpassword@localhost:5432/devflow?sslmode=disable go test ./...
 ```
 
 ---
@@ -296,7 +296,7 @@ Create the appropriate environment configuration for the API.
 Example:
 
 ```env
-DATABASE_URL=postgres://devflow:devflow@localhost:5432/devflow?sslmode=disable
+DATABASE_URL=postgres://devflow:devflowpassword@localhost:5432/devflow?sslmode=disable
 PORT=8080
 ```
 
@@ -364,6 +364,139 @@ Current foundation includes:
 - Docker-based PostgreSQL development environment
 
 The next capabilities will build on this foundation.
+
+### Working Change Log
+
+This section is the handoff record for ongoing development. Each future change should update this README with:
+
+- What was added or changed
+- The relevant API, domain, database, or infrastructure files
+- Tests added or updated
+- Validation performed
+- Remaining work or the next recommended step
+
+#### Baseline: 2026-09-17
+
+Already present in the repository:
+
+- Authentication helpers for passwords, sessions, tokens, and token hashing
+- User registration and login/logout flows
+- Authentication middleware
+- Users, workspaces, workspace members, projects, repositories, and sessions in the domain layer
+- Repository and service layers for users, workspaces, workspace members, projects, repositories, and sessions
+- HTTP handlers and routes for health checks, authentication, workspaces, workspace members, and projects
+- PostgreSQL configuration and database access
+- SQL migrations for the current database schema
+- Unit, service, repository, and HTTP tests across the backend
+- Docker Compose development database setup
+
+#### Current Focus
+
+- Continue backend development from the existing foundation
+- Keep authentication and workspace authorization correct as new features are added
+- Add each implementation step to this log before moving to the next major capability
+
+#### Change Entries
+
+| Date | Change | Files or area | Tests and validation | Status |
+|------|--------|---------------|----------------------|--------|
+| 2026-09-17 | Added this working change log and continuation record | `README.md` | README reviewed; repository baseline checked | Complete |
+| 2026-09-17 | Added comprehensive unit tests for Repository Service `Create`, including a recording repository fake | `apps/api/internal/service/repository_service_test.go` | `go test ./internal/service -run '^TestRepositoryServiceCreate'`; `DATABASE_URL=postgres://devflow:devflowpassword@localhost:5432/devflow?sslmode=disable go test ./...` | Complete |
+| 2026-09-17 | Implemented and tested Repository Service `FindByID` with project-membership authorization and error propagation | `apps/api/internal/service/repository_service.go`, `apps/api/internal/service/repository_service_test.go` | `go test ./internal/service -run '^TestRepositoryServiceFindByID'`; `go test ./internal/service`; full `go test ./...` with Compose database URL | Complete |
+| 2026-09-17 | Implemented and tested Repository Service `ListByProjectID` with project-membership authorization and repository delegation | `apps/api/internal/service/repository_service.go`, `apps/api/internal/service/repository_service_test.go` | `go test ./internal/service -run '^TestRepositoryServiceListByProjectID'`; `go test ./internal/service`; full `go test ./...` with Compose database URL | Complete |
+| 2026-09-17 | Implemented and tested Repository Service `Delete` with project-membership authorization and error propagation | `apps/api/internal/service/repository_service.go`, `apps/api/internal/service/repository_service_test.go` | `go test ./internal/service -run '^TestRepositoryServiceDelete'`; `go test ./internal/service`; full `go test ./...` with Compose database URL | Complete |
+| 2026-09-17 | Added repository HTTP handlers and focused status/authentication tests for create, list, get, and delete | `apps/api/internal/http/repository_handler.go`, `apps/api/internal/http/repository_handler_test.go` | `go test ./internal/http -run '^TestRepositoryHandler'`; `go test ./internal/http`; full `go test ./...` with Compose database URL | Complete |
+| 2026-09-17 | Wired repository handlers into `router.go` and `main.go`, then added protected route coverage | `apps/api/internal/http/router.go`, `apps/api/internal/http/router_test.go`, `apps/api/cmd/server/main.go` | `go test ./internal/http -run '^TestRouter'`; `go test ./internal/http`; full `go test ./...` with Compose database URL | Complete |
+| 2026-09-17 | Verified the running API and documented the required database environment for the full test command | `README.md` | `DATABASE_URL=postgres://devflow:devflowpassword@localhost:5432/devflow?sslmode=disable go test ./...`; `curl http://localhost:8080/health` returned `{"service":"devflow-api","status":"ok"}` | Complete |
+| 2026-09-17 | Added the GitHub connection domain contract, migration 8, status validation, and PostgreSQL uniqueness tests | `apps/api/internal/domain/github_connection.go`, `apps/api/internal/domain/github_connection_test.go`, `apps/api/internal/database/migrations/000008_create_github_connections.up.sql`, `apps/api/internal/database/migrations/000008_create_github_connections.down.sql`, `apps/api/internal/database/migrations/000008_create_github_connections_test.go` | `go test ./internal/domain`; focused migration constraint test; full `DATABASE_URL=postgres://devflow:devflowpassword@localhost:5432/devflow?sslmode=disable go test ./...` | Complete |
+| 2026-09-17 | Added the GitHub connection repository interface, PostgreSQL implementation, and create/lookup/status-update integration tests | `apps/api/internal/repository/github_connection_repository.go`, `apps/api/internal/repository/github_connection_repository_test.go` | `DATABASE_URL=postgres://devflow:devflowpassword@localhost:5432/devflow?sslmode=disable go test ./internal/repository -run '^TestGitHubConnectionRepository'`; full `go test ./...` | Complete |
+| 2026-09-17 | Added the GitHub connection service with member read access, owner/admin management authorization, duplicate protection, and status-transition tests | `apps/api/internal/service/github_connection_service.go`, `apps/api/internal/service/github_connection_service_test.go` | `go test ./internal/service -run '^TestGitHubConnectionService'`; `go test ./internal/service`; full `go test ./...` with Compose database URL | Complete |
+| 2026-09-17 | Added authenticated GitHub connection HTTP handlers and tests for create, lookup, status updates, authorization, validation, and transitions | `apps/api/internal/http/github_connection_handler.go`, `apps/api/internal/http/github_connection_handler_test.go` | `go test ./internal/http -run '^TestGitHubConnectionHandler'`; `go test ./internal/http`; full `go test ./...` with Compose database URL | Complete |
+| 2026-09-17 | Wired GitHub connection dependencies into `main.go` and protected workspace routes into `router.go`, with route-level tests | `apps/api/cmd/server/main.go`, `apps/api/internal/http/router.go`, `apps/api/internal/http/router_test.go` | `go test ./internal/http -run '^TestRouter'`; `go test ./internal/http`; full `go test ./...` with Compose database URL | Complete |
+| 2026-09-17 | Added typed GitHub App configuration validation and a mockable integration client interface without network calls | `apps/api/internal/config/config.go`, `apps/api/internal/config/config_test.go`, `apps/api/internal/integration/github/client.go`, `apps/api/internal/integration/github/client_test.go` | `go test ./internal/config ./internal/integration/github`; full `go test ./...` with Compose database URL | Complete |
+| 2026-09-17 | Implemented the GitHub App client with injectable HTTP transport, JWT authentication, installation-token exchange, repository decoding, and API error handling | `apps/api/internal/integration/github/client.go`, `apps/api/internal/integration/github/client_test.go` | `go test ./internal/integration/github`; full `go test ./...` with Compose database URL | Complete |
+| 2026-09-17 | Added the GitHub repository import service with connection lookup, GitHub client delegation, repository metadata mapping, duplicate skipping, and error propagation tests | `apps/api/internal/service/github_repository_import_service.go`, `apps/api/internal/service/github_repository_import_service_test.go` | `go test ./internal/service -run '^TestGitHubRepositoryImportService'`; `go test ./internal/service`; full `go test ./...` with Compose database URL | Complete |
+| 2026-09-17 | Exposed repository import through an authenticated endpoint and added a controlled unavailable-client fallback when GitHub App credentials are missing | `apps/api/internal/http/github_repository_import_handler.go`, `apps/api/internal/http/github_repository_import_handler_test.go`, `apps/api/internal/http/router.go`, `apps/api/internal/http/router_test.go`, `apps/api/cmd/server/main.go`, `apps/api/internal/integration/github/client.go` | `go test ./internal/http -run '^(TestGitHubRepositoryImportHandler|TestRouter)'`; `go test ./internal/http`; full `go test ./...` with Compose database URL | Complete |
+| 2026-09-17 | Added an in-process background import queue with bounded retries, cancellation handling, asynchronous `202` responses, and worker lifecycle wiring | `apps/api/internal/service/github_repository_import_job.go`, `apps/api/internal/service/github_repository_import_job_test.go`, `apps/api/internal/http/github_repository_import_handler.go`, `apps/api/cmd/server/main.go` | `go test ./internal/service`; `go test ./internal/http`; full `go test ./...` with Compose database URL | Complete |
+| 2026-09-17 | Added durable import-job status persistence, migration 9, structured failure code/message fields, retry/success/failure metrics, and lifecycle integration tests | `apps/api/internal/domain/github_repository_import_job.go`, `apps/api/internal/database/migrations/000009_create_github_repository_import_jobs.*`, `apps/api/internal/repository/github_repository_import_job_repository.go`, `apps/api/internal/repository/github_repository_import_job_repository_test.go`, `apps/api/internal/service/github_repository_import_job.go` | Migration 9 applied; focused durable repository tests; full `go test ./...` with Compose database URL | Complete |
+
+When development resumes, append a new row rather than replacing previous entries. This README is the source of truth for continuing work across sessions.
+
+Next small step: expose a protected job-status lookup endpoint and add durable queue recovery for jobs left in `running` after process shutdown.
+
+### Next Large Steps
+
+The larger implementation sequence is:
+
+1. Complete repository management
+     - `ListByProjectID` and `Delete` service tests and implementations
+     - HTTP handlers, routes, request validation, and authorization tests
+     - Consistent API error responses
+
+2. Stabilize the backend platform
+     - Authentication and authorization review across every endpoint
+     - Request-scoped context and structured error handling
+     - Configuration, logging, health checks, and database migration discipline
+     - CI test execution and integration-test database setup
+
+3. Build GitHub integration
+     - Secure GitHub connection and token storage model
+     - Repository import and synchronization service
+     - Issues and pull requests domain models and persistence
+     - Rate-limit handling, retries, webhook validation, and sync observability
+
+4. Add the frontend workspace
+     - Authentication and workspace navigation
+     - Projects, repositories, members, and activity views
+     - Typed API client and consistent loading/error states
+
+5. Add code intelligence
+     - Repository ingestion and file metadata
+     - Code and documentation indexing
+     - Search and retrieval contracts
+     - Background jobs and incremental re-indexing
+
+6. Add the AI engineering assistant
+     - Context assembly from repository, project, and documentation data
+     - Provider abstraction and request safety limits
+     - Conversation persistence, citations, and auditability
+
+7. Harden for production
+     - CI/CD deployment pipeline
+     - Metrics, tracing, alerting, backups, and secret management
+     - Security review, performance testing, and operational documentation
+
+### GitHub Integration Design
+
+The first GitHub integration will keep connection metadata separate from imported repository metadata.
+
+#### Initial Decisions
+
+- A GitHub connection belongs to a workspace, not to an individual repository.
+- The preferred integration model is a GitHub App installation because it supports least-privilege repository access, installation scoping, and webhook delivery.
+- Store the GitHub installation ID, account login, selected permissions, connection status, and timestamps in a dedicated connection model.
+- Do not store long-lived GitHub access tokens in the `repositories` table or in logs. Generate short-lived installation tokens on the server using application credentials managed outside the database.
+- Keep GitHub API behavior behind an integration client interface so services remain testable without network calls.
+- Import metadata through the existing Repository Service so authorization and duplicate protection remain in one place.
+- Run repository synchronization asynchronously after connection or import; HTTP requests should not wait for a complete repository sync.
+
+#### Planned Flow
+
+```text
+Workspace user
+     ↓
+GitHub App installation / connection validation
+     ↓
+Persist workspace GitHub connection metadata
+     ↓
+List accessible GitHub repositories
+     ↓
+Repository Service Create
+     ↓
+Background synchronization and webhook updates
+```
+
+Next GitHub step: expose synchronization job status and add recovery for interrupted jobs.
 
 ---
 
