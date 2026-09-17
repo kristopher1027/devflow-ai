@@ -113,6 +113,19 @@ func main() {
 		repositoryService,
 	)
 
+	// GitHub repository import jobs
+	githubRepositoryImportJobService :=
+		service.NewGitHubRepositoryImportJobService(
+			githubImportJobRepository,
+			projectRepository,
+			workspaceMemberRepository,
+		)
+
+	githubRepositoryImportJobHandler :=
+		devflowhttp.NewGitHubRepositoryImportJobHandler(
+			githubRepositoryImportJobService,
+		)
+
 	// GitHub connections
 	githubConnectionService := service.NewGitHubConnectionService(
 		githubConnectionRepository,
@@ -165,6 +178,7 @@ func main() {
 		projectHandler,
 		repositoryHandler,
 		githubRepositoryImportHandler,
+		githubRepositoryImportJobHandler,
 		githubConnectionHandler,
 		authMiddleware,
 	)

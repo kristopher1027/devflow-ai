@@ -7,6 +7,7 @@ const (
 	GitHubRepositoryImportJobStatusRunning   = "running"
 	GitHubRepositoryImportJobStatusSucceeded = "succeeded"
 	GitHubRepositoryImportJobStatusFailed    = "failed"
+	GitHubRepositoryImportJobFailureCodeWorkerShutdown = "worker_shutdown"
 )
 
 type GitHubRepositoryImportJob struct {

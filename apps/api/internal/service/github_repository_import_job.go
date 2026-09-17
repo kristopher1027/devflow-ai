@@ -115,9 +115,40 @@ func (w *GitHubRepositoryImportWorker) Enqueue(
 func (w *GitHubRepositoryImportWorker) Start(ctx context.Context) {
 	for {
 		select {
+		case <-ctx.Done():
+			w.drainQueuedJobs(ctx)
+			return
+		default:
+		}
+
+		select {
 		case request := <-w.requests:
 			_ = w.runWithRetry(ctx, request)
+
 		case <-ctx.Done():
+			w.drainQueuedJobs(ctx)
+			return
+		}
+	}
+}
+
+func (w *GitHubRepositoryImportWorker) drainQueuedJobs(ctx context.Context) {
+	for {
+		select {
+		case request := <-w.requests:
+			if w.jobs != nil {
+				_ = w.jobs.MarkFailed(
+					ctx,
+					request.JobID,
+					0,
+					domain.GitHubRepositoryImportJobFailureCodeWorkerShutdown,
+					"worker shutting down before job was processed",
+				)
+			}
+
+			w.metrics.Failed.Add(1)
+
+		default:
 			return
 		}
 	}

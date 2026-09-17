@@ -191,6 +191,11 @@ func newTestRouter() http.Handler {
 		&fakeGitHubRepositoryImportQueue{},
 	)
 
+	githubRepositoryImportJobHandler :=
+		NewGitHubRepositoryImportJobHandler(
+			&fakeGitHubRepositoryImportJobService{},
+		)
+
 	githubConnectionHandler := NewGitHubConnectionHandler(
 		&fakeGitHubConnectionService{},
 	)
@@ -208,6 +213,7 @@ func newTestRouter() http.Handler {
 		projectHandler,
 		repositoryHandler,
 		githubRepositoryImportHandler,
+		githubRepositoryImportJobHandler,
 		githubConnectionHandler,
 		authMiddleware,
 	)

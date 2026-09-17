@@ -11,6 +11,7 @@ func NewRouter(
 	projectHandler *ProjectHandler,
 	repositoryHandler *RepositoryHandler,
 	githubRepositoryImportHandler *GitHubRepositoryImportHandler,
+	githubRepositoryImportJobHandler *GitHubRepositoryImportJobHandler,
 	githubConnectionHandler *GitHubConnectionHandler,
 	authMiddleware *AuthMiddleware,
 ) http.Handler {
@@ -36,6 +37,9 @@ func NewRouter(
 
 	protectedGetWorkspace := authMiddleware.RequireAuth(
 		http.HandlerFunc(workspaceHandler.GetByID),
+	)
+	protectedGetImportJob := authMiddleware.RequireAuth(
+		http.HandlerFunc(githubRepositoryImportJobHandler.GetByID),
 	)
 
 	protectedDeleteWorkspace := authMiddleware.RequireAuth(
@@ -206,6 +210,21 @@ func NewRouter(
 				http.StatusMethodNotAllowed,
 			)
 		}
+	}))
+	mux.Handle("/github/repository-import-jobs/", http.HandlerFunc(func(
+		w http.ResponseWriter,
+		r *http.Request,
+	) {
+		if r.Method != http.MethodGet {
+			http.Error(
+				w,
+				"method not allowed",
+				http.StatusMethodNotAllowed,
+			)
+			return
+		}
+
+		protectedGetImportJob.ServeHTTP(w, r)
 	}))
 	mux.Handle("/projects/", http.HandlerFunc(func(
 		w http.ResponseWriter,
