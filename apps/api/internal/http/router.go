@@ -9,6 +9,9 @@ func NewRouter(
 	workspaceHandler *WorkspaceHandler,
 	workspaceMemberHandler *WorkspaceMemberHandler,
 	projectHandler *ProjectHandler,
+	repositoryHandler *RepositoryHandler,
+	githubRepositoryImportHandler *GitHubRepositoryImportHandler,
+	githubConnectionHandler *GitHubConnectionHandler,
 	authMiddleware *AuthMiddleware,
 ) http.Handler {
 	mux := http.NewServeMux()
@@ -73,6 +76,38 @@ func NewRouter(
 		http.HandlerFunc(projectHandler.Delete),
 	)
 
+	protectedCreateRepository := authMiddleware.RequireAuth(
+		http.HandlerFunc(repositoryHandler.Create),
+	)
+
+	protectedListRepositories := authMiddleware.RequireAuth(
+		http.HandlerFunc(repositoryHandler.ListByProjectID),
+	)
+
+	protectedGetRepository := authMiddleware.RequireAuth(
+		http.HandlerFunc(repositoryHandler.GetByID),
+	)
+
+	protectedDeleteRepository := authMiddleware.RequireAuth(
+		http.HandlerFunc(repositoryHandler.Delete),
+	)
+
+	protectedImportRepositories := authMiddleware.RequireAuth(
+		http.HandlerFunc(githubRepositoryImportHandler.Import),
+	)
+
+	protectedCreateGitHubConnection := authMiddleware.RequireAuth(
+		http.HandlerFunc(githubConnectionHandler.Create),
+	)
+
+	protectedGetGitHubConnection := authMiddleware.RequireAuth(
+		http.HandlerFunc(githubConnectionHandler.GetByWorkspaceID),
+	)
+
+	protectedUpdateGitHubConnectionStatus := authMiddleware.RequireAuth(
+		http.HandlerFunc(githubConnectionHandler.UpdateStatus),
+	)
+
 	mux.Handle("/workspaces", http.HandlerFunc(func(
 		w http.ResponseWriter,
 		r *http.Request,
@@ -119,6 +154,18 @@ func NewRouter(
 			r.Method == http.MethodGet:
 			protectedListProjects.ServeHTTP(w, r)
 
+		case hasSuffix(path, "/github") &&
+			r.Method == http.MethodPost:
+			protectedCreateGitHubConnection.ServeHTTP(w, r)
+
+		case hasSuffix(path, "/github") &&
+			r.Method == http.MethodGet:
+			protectedGetGitHubConnection.ServeHTTP(w, r)
+
+		case hasSuffix(path, "/github") &&
+			r.Method == http.MethodPatch:
+			protectedUpdateGitHubConnectionStatus.ServeHTTP(w, r)
+
 		case containsMemberPath(path) &&
 			r.Method == http.MethodGet:
 			protectedGetWorkspaceMember.ServeHTTP(w, r)
@@ -141,15 +188,48 @@ func NewRouter(
 			)
 		}
 	}))
-	mux.Handle("/projects/", http.HandlerFunc(func(
+	mux.Handle("/repositories/", http.HandlerFunc(func(
 		w http.ResponseWriter,
 		r *http.Request,
 	) {
 		switch r.Method {
 		case http.MethodGet:
-			protectedGetProject.ServeHTTP(w, r)
+			protectedGetRepository.ServeHTTP(w, r)
 
 		case http.MethodDelete:
+			protectedDeleteRepository.ServeHTTP(w, r)
+
+		default:
+			http.Error(
+				w,
+				"method not allowed",
+				http.StatusMethodNotAllowed,
+			)
+		}
+	}))
+	mux.Handle("/projects/", http.HandlerFunc(func(
+		w http.ResponseWriter,
+		r *http.Request,
+	) {
+		path := r.URL.Path
+
+		switch {
+		case hasSuffix(path, "/repositories/import") &&
+			r.Method == http.MethodPost:
+			protectedImportRepositories.ServeHTTP(w, r)
+
+		case hasSuffix(path, "/repositories") &&
+			r.Method == http.MethodPost:
+			protectedCreateRepository.ServeHTTP(w, r)
+
+		case hasSuffix(path, "/repositories") &&
+			r.Method == http.MethodGet:
+			protectedListRepositories.ServeHTTP(w, r)
+
+		case r.Method == http.MethodGet:
+			protectedGetProject.ServeHTTP(w, r)
+
+		case r.Method == http.MethodDelete:
 			protectedDeleteProject.ServeHTTP(w, r)
 
 		default:

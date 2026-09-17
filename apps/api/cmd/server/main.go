@@ -11,6 +11,7 @@ import (
 	"github.com/kristopher1027/devflow-ai/internal/config"
 	"github.com/kristopher1027/devflow-ai/internal/database"
 	devflowhttp "github.com/kristopher1027/devflow-ai/internal/http"
+	githubintegration "github.com/kristopher1027/devflow-ai/internal/integration/github"
 	"github.com/kristopher1027/devflow-ai/internal/repository"
 	"github.com/kristopher1027/devflow-ai/internal/server"
 	"github.com/kristopher1027/devflow-ai/internal/service"
@@ -35,6 +36,9 @@ func main() {
 	workspaceRepository := repository.NewWorkspaceRepository(db)
 	workspaceMemberRepository := repository.NewWorkspaceMemberRepository(db)
 	projectRepository := repository.NewProjectRepository(db)
+	repositoryRepository := repository.NewRepositoryRepository(db)
+	githubConnectionRepository := repository.NewGitHubConnectionRepository(db)
+	githubImportJobRepository := repository.NewGitHubRepositoryImportJobRepository(db)
 
 	// User
 	userService := service.NewUserService(userRepository)
@@ -99,6 +103,58 @@ func main() {
 		projectService,
 	)
 
+	// Repositories
+	repositoryService := service.NewRepositoryService(
+		repositoryRepository,
+		projectRepository,
+		workspaceMemberRepository,
+	)
+	repositoryHandler := devflowhttp.NewRepositoryHandler(
+		repositoryService,
+	)
+
+	// GitHub connections
+	githubConnectionService := service.NewGitHubConnectionService(
+		githubConnectionRepository,
+		workspaceRepository,
+		workspaceMemberRepository,
+	)
+	githubConnectionHandler := devflowhttp.NewGitHubConnectionHandler(
+		githubConnectionService,
+	)
+
+	githubClient, githubClientErr := githubintegration.NewClient(
+		cfg.GitHubApp,
+		nil,
+		"",
+	)
+	if githubClientErr != nil {
+		log.Printf("GitHub integration unavailable: %v", githubClientErr)
+		githubClient = githubintegration.NewUnavailableClient(githubClientErr)
+	}
+
+	githubRepositoryImportService := service.NewGitHubRepositoryImportService(
+		projectRepository,
+		githubConnectionService,
+		githubClient,
+		repositoryService,
+	)
+	githubRepositoryImportWorker := service.NewGitHubRepositoryImportWorkerWithStore(
+		githubRepositoryImportService,
+		32,
+		service.GitHubRepositoryImportRetryPolicy{
+			MaxAttempts: 3,
+			Delay:       2 * time.Second,
+		},
+		githubImportJobRepository,
+	)
+	githubRepositoryImportHandler := devflowhttp.NewGitHubRepositoryImportHandler(
+		githubRepositoryImportWorker,
+	)
+	jobContext, cancelJobs := context.WithCancel(ctx)
+	defer cancelJobs()
+	go githubRepositoryImportWorker.Start(jobContext)
+
 	// Router
 	router := devflowhttp.NewRouter(
 		userHandler,
@@ -107,6 +163,9 @@ func main() {
 		workspaceHandler,
 		workspaceMemberHandler,
 		projectHandler,
+		repositoryHandler,
+		githubRepositoryImportHandler,
+		githubConnectionHandler,
 		authMiddleware,
 	)
 

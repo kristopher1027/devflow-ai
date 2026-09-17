@@ -211,3 +211,61 @@ func (s *RepositoryServiceImpl) Create(
 
 	return newRepository, nil
 }
+
+func (s *RepositoryServiceImpl) FindByID(
+	ctx context.Context,
+	requesterID string,
+	id string,
+) (*domain.Repository, error) {
+	repository, err := s.repositories.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := s.authorizeProjectMember(
+		ctx,
+		requesterID,
+		repository.ProjectID,
+	); err != nil {
+		return nil, err
+	}
+
+	return repository, nil
+}
+
+func (s *RepositoryServiceImpl) ListByProjectID(
+	ctx context.Context,
+	requesterID string,
+	projectID string,
+) ([]*domain.Repository, error) {
+	if _, err := s.authorizeProjectMember(
+		ctx,
+		requesterID,
+		projectID,
+	); err != nil {
+		return nil, err
+	}
+
+	return s.repositories.ListByProjectID(ctx, projectID)
+}
+
+func (s *RepositoryServiceImpl) Delete(
+	ctx context.Context,
+	requesterID string,
+	id string,
+) error {
+	repository, err := s.repositories.FindByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	if _, err := s.authorizeProjectMember(
+		ctx,
+		requesterID,
+		repository.ProjectID,
+	); err != nil {
+		return err
+	}
+
+	return s.repositories.Delete(ctx, id)
+}

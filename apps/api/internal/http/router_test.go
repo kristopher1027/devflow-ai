@@ -183,6 +183,18 @@ func newTestRouter() http.Handler {
 		&fakeProjectService{},
 	)
 
+	repositoryHandler := NewRepositoryHandler(
+		&fakeRepositoryService{},
+	)
+
+	githubRepositoryImportHandler := NewGitHubRepositoryImportHandler(
+		&fakeGitHubRepositoryImportQueue{},
+	)
+
+	githubConnectionHandler := NewGitHubConnectionHandler(
+		&fakeGitHubConnectionService{},
+	)
+
 	authMiddleware := NewAuthMiddleware(
 		&routerFakeAuthService{},
 	)
@@ -194,6 +206,9 @@ func newTestRouter() http.Handler {
 		workspaceHandler,
 		workspaceMemberHandler,
 		projectHandler,
+		repositoryHandler,
+		githubRepositoryImportHandler,
+		githubConnectionHandler,
 		authMiddleware,
 	)
 }
@@ -319,6 +334,46 @@ func TestRouterProtectedRoutesRequireAuth(t *testing.T) {
 			method: http.MethodDelete,
 			path:   "/workspaces/workspace-123/members/user-456",
 		},
+		{
+			name:   "create repository",
+			method: http.MethodPost,
+			path:   "/projects/project-123/repositories",
+		},
+		{
+			name:   "list repositories",
+			method: http.MethodGet,
+			path:   "/projects/project-123/repositories",
+		},
+		{
+			name:   "get repository",
+			method: http.MethodGet,
+			path:   "/repositories/repository-123",
+		},
+		{
+			name:   "delete repository",
+			method: http.MethodDelete,
+			path:   "/repositories/repository-123",
+		},
+		{
+			name:   "import repositories",
+			method: http.MethodPost,
+			path:   "/projects/project-123/repositories/import",
+		},
+		{
+			name:   "create github connection",
+			method: http.MethodPost,
+			path:   "/workspaces/workspace-123/github",
+		},
+		{
+			name:   "get github connection",
+			method: http.MethodGet,
+			path:   "/workspaces/workspace-123/github",
+		},
+		{
+			name:   "update github connection status",
+			method: http.MethodPatch,
+			path:   "/workspaces/workspace-123/github",
+		},
 	}
 
 	for _, tt := range tests {
@@ -381,6 +436,46 @@ func TestRouterProtectedRoutesWithAuth(t *testing.T) {
 			name:   "remove member",
 			method: http.MethodDelete,
 			path:   "/workspaces/workspace-123/members/user-456",
+		},
+		{
+			name:   "create repository",
+			method: http.MethodPost,
+			path:   "/projects/project-123/repositories",
+		},
+		{
+			name:   "list repositories",
+			method: http.MethodGet,
+			path:   "/projects/project-123/repositories",
+		},
+		{
+			name:   "get repository",
+			method: http.MethodGet,
+			path:   "/repositories/repository-123",
+		},
+		{
+			name:   "delete repository",
+			method: http.MethodDelete,
+			path:   "/repositories/repository-123",
+		},
+		{
+			name:   "import repositories",
+			method: http.MethodPost,
+			path:   "/projects/project-123/repositories/import",
+		},
+		{
+			name:   "create github connection",
+			method: http.MethodPost,
+			path:   "/workspaces/workspace-123/github",
+		},
+		{
+			name:   "get github connection",
+			method: http.MethodGet,
+			path:   "/workspaces/workspace-123/github",
+		},
+		{
+			name:   "update github connection status",
+			method: http.MethodPatch,
+			path:   "/workspaces/workspace-123/github",
 		},
 	}
 
