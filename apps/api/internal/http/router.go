@@ -13,6 +13,7 @@ func NewRouter(
 	githubRepositoryImportHandler *GitHubRepositoryImportHandler,
 	githubRepositoryImportJobHandler *GitHubRepositoryImportJobHandler,
 	githubConnectionHandler *GitHubConnectionHandler,
+	repositorySyncJobHandler *RepositorySyncJobHandler,
 	authMiddleware *AuthMiddleware,
 ) http.Handler {
 	mux := http.NewServeMux()
@@ -110,6 +111,9 @@ func NewRouter(
 
 	protectedUpdateGitHubConnectionStatus := authMiddleware.RequireAuth(
 		http.HandlerFunc(githubConnectionHandler.UpdateStatus),
+	)
+	protectedGetRepositorySyncJob := authMiddleware.RequireAuth(
+	http.HandlerFunc(repositorySyncJobHandler.GetByID),
 	)
 
 	mux.Handle("/workspaces", http.HandlerFunc(func(
@@ -226,6 +230,21 @@ func NewRouter(
 
 		protectedGetImportJob.ServeHTTP(w, r)
 	}))
+	mux.Handle("/repositories/sync-jobs/", http.HandlerFunc(func(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	if r.Method != http.MethodGet {
+		http.Error(
+			w,
+			"method not allowed",
+			http.StatusMethodNotAllowed,
+		)
+		return
+	}
+
+	protectedGetRepositorySyncJob.ServeHTTP(w, r)
+}))
 	mux.Handle("/projects/", http.HandlerFunc(func(
 		w http.ResponseWriter,
 		r *http.Request,
