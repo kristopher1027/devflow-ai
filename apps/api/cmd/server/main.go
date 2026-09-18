@@ -39,6 +39,7 @@ func main() {
 	repositoryRepository := repository.NewRepositoryRepository(db)
 	githubConnectionRepository := repository.NewGitHubConnectionRepository(db)
 	githubImportJobRepository := repository.NewGitHubRepositoryImportJobRepository(db)
+	repositorySyncJobRepository := repository.NewRepositorySyncJobRepository(db)
 
 	// User
 	userService := service.NewUserService(userRepository)
@@ -113,6 +114,17 @@ func main() {
 		repositoryService,
 	)
 
+	repositorySyncJobService := service.NewRepositorySyncJobService(
+	repositorySyncJobRepository,
+	repositoryRepository,
+	projectRepository,
+	workspaceMemberRepository,
+)
+
+repositorySyncJobHandler := devflowhttp.NewRepositorySyncJobHandler(
+	repositorySyncJobService,
+)
+
 	// GitHub repository import jobs
 	githubRepositoryImportJobService :=
 		service.NewGitHubRepositoryImportJobService(
@@ -180,6 +192,7 @@ func main() {
 		githubRepositoryImportHandler,
 		githubRepositoryImportJobHandler,
 		githubConnectionHandler,
+		repositorySyncJobHandler,
 		authMiddleware,
 	)
 
