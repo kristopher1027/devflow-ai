@@ -20,54 +20,63 @@ type RepositorySyncJobService interface {
 	) (*domain.RepositorySyncJob, error)
 }
 
-type repositorySyncJobService struct {
-	jobs             repository.RepositorySyncJobRepository
-	repositories     repository.RepositoryRepository
-	projects         repository.ProjectRepository
-	workspaceMembers repository.WorkspaceMemberRepository
+type RepositorySyncJobServiceImpl struct {
+	jobRepository     repository.RepositorySyncJobRepository
+	repositoryRepo    repository.RepositoryRepository
+	projectRepo       repository.ProjectRepository
+	workspaceMemberRepo repository.WorkspaceMemberRepository
 }
 
 func NewRepositorySyncJobService(
-	jobs repository.RepositorySyncJobRepository,
-	repositories repository.RepositoryRepository,
-	projects repository.ProjectRepository,
-	workspaceMembers repository.WorkspaceMemberRepository,
-) RepositorySyncJobService {
-	return &repositorySyncJobService{
-		jobs:             jobs,
-		repositories:     repositories,
-		projects:         projects,
-		workspaceMembers: workspaceMembers,
+	jobRepository repository.RepositorySyncJobRepository,
+	repositoryRepo repository.RepositoryRepository,
+	projectRepo repository.ProjectRepository,
+	workspaceMemberRepo repository.WorkspaceMemberRepository,
+) *RepositorySyncJobServiceImpl {
+	return &RepositorySyncJobServiceImpl{
+		jobRepository:       jobRepository,
+		repositoryRepo:      repositoryRepo,
+		projectRepo:         projectRepo,
+		workspaceMemberRepo: workspaceMemberRepo,
 	}
 }
 
-func (s *repositorySyncJobService) FindByID(
+func (s *RepositorySyncJobServiceImpl) FindByID(
 	ctx context.Context,
 	requesterID string,
 	id string,
 ) (*domain.RepositorySyncJob, error) {
-	job, err := s.jobs.FindByID(ctx, id)
+	job, err := s.jobRepository.FindByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
-	repo, err := s.repositories.FindByID(ctx, job.RepositoryID)
+	repo, err := s.repositoryRepo.FindByID(
+		ctx,
+		job.RepositoryID,
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	project, err := s.projects.FindByID(ctx, repo.ProjectID)
+	project, err := s.projectRepo.FindByID(
+		ctx,
+		repo.ProjectID,
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	_, err = s.workspaceMembers.Find(
+	_, err = s.workspaceMemberRepo.Find(
 		ctx,
 		project.WorkspaceID,
 		requesterID,
 	)
 	if err != nil {
-		if errors.Is(err, repository.ErrWorkspaceMemberNotFound) {
+		if errors.Is(
+			err,
+			repository.ErrWorkspaceMemberNotFound,
+		) {
 			return nil, ErrRepositorySyncJobUnauthorized
 		}
 
@@ -76,3 +85,5 @@ func (s *repositorySyncJobService) FindByID(
 
 	return job, nil
 }
+
+var _ RepositorySyncJobService = (*RepositorySyncJobServiceImpl)(nil)
