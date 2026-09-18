@@ -199,6 +199,9 @@ func newTestRouter() http.Handler {
 	githubConnectionHandler := NewGitHubConnectionHandler(
 		&fakeGitHubConnectionService{},
 	)
+	repositorySyncJobHandler := NewRepositorySyncJobHandler(
+	&fakeRepositorySyncJobService{},
+)
 
 	authMiddleware := NewAuthMiddleware(
 		&routerFakeAuthService{},
@@ -215,6 +218,7 @@ func newTestRouter() http.Handler {
 		githubRepositoryImportHandler,
 		githubRepositoryImportJobHandler,
 		githubConnectionHandler,
+		repositorySyncJobHandler,
 		authMiddleware,
 	)
 }
