@@ -147,7 +147,7 @@ func setupRepositorySyncJobRepository(
 		db.Close()
 	})
 
-	return ctx, db, NewRepositorySyncJobRepository(db.Pool), repositoryID
+	return ctx, db, NewRepositorySyncJobRepository(db), repositoryID
 }
 
 func TestRepositorySyncJobRepositoryLifecycle(t *testing.T) {
