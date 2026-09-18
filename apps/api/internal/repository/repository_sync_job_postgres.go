@@ -5,17 +5,17 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/kristopher1027/devflow-ai/internal/database"
 	"github.com/kristopher1027/devflow-ai/internal/domain"
 )
 
 type PostgresRepositorySyncJobRepository struct {
-	db *pgxpool.Pool
+	db *database.DB
 }
 
 func NewRepositorySyncJobRepository(
-	db *pgxpool.Pool,
+	db *database.DB,
 ) *PostgresRepositorySyncJobRepository {
 	return &PostgresRepositorySyncJobRepository{
 		db: db,
@@ -41,7 +41,7 @@ func (r *PostgresRepositorySyncJobRepository) Create(
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	`
 
-	_, err := r.db.Exec(
+	_, err := r.db.Pool.Exec(
 		ctx,
 		query,
 		job.ID,
@@ -79,7 +79,7 @@ func (r *PostgresRepositorySyncJobRepository) FindByID(
 
 	job := &domain.RepositorySyncJob{}
 
-	err := r.db.QueryRow(ctx, query, id).Scan(
+	err := r.db.Pool.QueryRow(ctx, query, id).Scan(
 		&job.ID,
 		&job.RepositoryID,
 		&job.Status,
@@ -122,7 +122,7 @@ func (r *PostgresRepositorySyncJobRepository) ListByRepositoryID(
 		ORDER BY created_at DESC
 	`
 
-	rows, err := r.db.Query(ctx, query, repositoryID)
+	rows, err := r.db.Pool.Query(ctx, query, repositoryID)
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +171,7 @@ func (r *PostgresRepositorySyncJobRepository) MarkRunning(
 		WHERE id = $1
 	`
 
-	result, err := r.db.Exec(
+	result, err := r.db.Pool.Exec(
 		ctx,
 		query,
 		id,
@@ -206,7 +206,7 @@ func (r *PostgresRepositorySyncJobRepository) MarkSucceeded(
 		WHERE id = $1
 	`
 
-	result, err := r.db.Exec(
+	result, err := r.db.Pool.Exec(
 		ctx,
 		query,
 		id,
@@ -243,7 +243,7 @@ func (r *PostgresRepositorySyncJobRepository) MarkFailed(
 		WHERE id = $1
 	`
 
-	result, err := r.db.Exec(
+	result, err := r.db.Pool.Exec(
 		ctx,
 		query,
 		id,
