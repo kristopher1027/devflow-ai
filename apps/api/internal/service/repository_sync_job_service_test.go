@@ -193,7 +193,7 @@ func (f *fakeSyncWorkspaceMemberRepository) Find(
 	return &domain.WorkspaceMember{
 		WorkspaceID: workspaceID,
 		UserID:      userID,
-		Role:        domain.WorkspaceMemberRoleMember,
+		Role:        WorkspaceMemberRoleMember,
 	}, nil
 }
 
