@@ -11,10 +11,10 @@ import (
 )
 
 type fakeRepositorySyncJobRepository struct {
-	job         *domain.RepositorySyncJob
-	findErr     error
-	findCalls   int
-	gotJobID    string
+	job       *domain.RepositorySyncJob
+	findErr   error
+	findCalls int
+	gotJobID  string
 }
 
 func (f *fakeRepositorySyncJobRepository) Create(
@@ -113,7 +113,14 @@ func (f *fakeSyncRepositoryRepository) FindByProviderExternalID(
 ) (*domain.Repository, error) {
 	return nil, nil
 }
-
+func (f *fakeSyncRepositoryRepository) UpdateSyncStatus(
+	ctx context.Context,
+	id string,
+	status string,
+	lastSyncedAt *time.Time,
+) error {
+	return nil
+}
 func (f *fakeSyncRepositoryRepository) Delete(
 	ctx context.Context,
 	id string,
@@ -122,8 +129,8 @@ func (f *fakeSyncRepositoryRepository) Delete(
 }
 
 type fakeSyncProjectRepository struct {
-	project  *domain.Project
-	findErr  error
+	project   *domain.Project
+	findErr   error
 	findCalls int
 	gotID     string
 }
@@ -236,16 +243,16 @@ func testRepositorySyncJob() *domain.RepositorySyncJob {
 
 func testSyncRepository() *domain.Repository {
 	return &domain.Repository{
-		ID:          "repository-123",
-		ProjectID:   "project-123",
-		Provider:    "github",
-		ExternalID:  "12345",
-		Owner:       "test-owner",
-		Name:        "test-repo",
-		FullName:    "test-owner/test-repo",
+		ID:            "repository-123",
+		ProjectID:     "project-123",
+		Provider:      "github",
+		ExternalID:    "12345",
+		Owner:         "test-owner",
+		Name:          "test-repo",
+		FullName:      "test-owner/test-repo",
 		DefaultBranch: "main",
-		HTMLURL:     "https://github.com/test-owner/test-repo",
-		CloneURL:     "https://github.com/test-owner/test-repo.git",
+		HTMLURL:       "https://github.com/test-owner/test-repo",
+		CloneURL:      "https://github.com/test-owner/test-repo.git",
 	}
 }
 

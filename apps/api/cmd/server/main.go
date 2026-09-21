@@ -115,15 +115,15 @@ func main() {
 	)
 
 	repositorySyncJobService := service.NewRepositorySyncJobService(
-	repositorySyncJobRepository,
-	repositoryRepository,
-	projectRepository,
-	workspaceMemberRepository,
-)
+		repositorySyncJobRepository,
+		repositoryRepository,
+		projectRepository,
+		workspaceMemberRepository,
+	)
 
-repositorySyncJobHandler := devflowhttp.NewRepositorySyncJobHandler(
-	repositorySyncJobService,
-)
+	repositorySyncJobHandler := devflowhttp.NewRepositorySyncJobHandler(
+		repositorySyncJobService,
+	)
 
 	// GitHub repository import jobs
 	githubRepositoryImportJobService :=
@@ -173,13 +173,31 @@ repositorySyncJobHandler := devflowhttp.NewRepositorySyncJobHandler(
 		},
 		githubImportJobRepository,
 	)
+	repositorySnapshotRepository := repository.NewRepositorySnapshotRepository(db)
+
+	repositorySyncService := service.NewRepositorySyncService(
+		repositoryRepository,
+		repositorySnapshotRepository,
+		githubClient,
+	)
+
+	repositorySyncWorker := service.NewRepositorySyncWorkerWithStore(
+		repositorySyncService,
+		32,
+		service.RepositorySyncRetryPolicy{
+			MaxAttempts: 3,
+			Delay:       2 * time.Second,
+		},
+		repositorySyncJobRepository,
+	)
 	githubRepositoryImportHandler := devflowhttp.NewGitHubRepositoryImportHandler(
 		githubRepositoryImportWorker,
 	)
 	jobContext, cancelJobs := context.WithCancel(ctx)
 	defer cancelJobs()
-	go githubRepositoryImportWorker.Start(jobContext)
 
+	go githubRepositoryImportWorker.Start(jobContext)
+	go repositorySyncWorker.Start(jobContext)
 	// Router
 	router := devflowhttp.NewRouter(
 		userHandler,

@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-
 	"github.com/jackc/pgx/v5"
+	"time"
 
 	"github.com/kristopher1027/devflow-ai/internal/database"
 	"github.com/kristopher1027/devflow-ai/internal/domain"
@@ -34,6 +34,12 @@ type RepositoryRepository interface {
 		provider string,
 		externalID string,
 	) (*domain.Repository, error)
+	UpdateSyncStatus(
+		ctx context.Context,
+		id string,
+		status string,
+		lastSyncedAt *time.Time,
+	) error
 
 	Delete(
 		ctx context.Context,
@@ -328,6 +334,41 @@ func (r *PostgresRepositoryRepository) FindByProviderExternalID(
 	}
 
 	return &repository, nil
+}
+func (r *PostgresRepositoryRepository) UpdateSyncStatus(
+	ctx context.Context,
+	id string,
+	status string,
+	lastSyncedAt *time.Time,
+) error {
+	query := `
+		UPDATE repositories
+		SET
+			sync_status = $1,
+			last_synced_at = $2,
+			updated_at = now()
+		WHERE id = $3
+	`
+
+	commandTag, err := r.db.Pool.Exec(
+		ctx,
+		query,
+		status,
+		lastSyncedAt,
+		id,
+	)
+	if err != nil {
+		return fmt.Errorf(
+			"update repository sync status: %w",
+			err,
+		)
+	}
+
+	if commandTag.RowsAffected() == 0 {
+		return ErrRepositoryNotFound
+	}
+
+	return nil
 }
 
 func (r *PostgresRepositoryRepository) Delete(

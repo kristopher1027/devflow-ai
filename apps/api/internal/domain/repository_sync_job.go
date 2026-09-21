@@ -7,6 +7,8 @@ const (
 	RepositorySyncJobStatusRunning   = "running"
 	RepositorySyncJobStatusSucceeded = "succeeded"
 	RepositorySyncJobStatusFailed    = "failed"
+
+	RepositorySyncJobFailureCodeWorkerShutdown = "worker_shutdown"
 )
 
 type RepositorySyncJob struct {

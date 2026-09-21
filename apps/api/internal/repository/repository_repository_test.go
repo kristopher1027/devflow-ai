@@ -1133,3 +1133,223 @@ func TestRepositoryRepositoryDeleteNotFound(t *testing.T) {
 		)
 	}
 }
+func TestRepositoryRepositoryUpdateSyncStatus(t *testing.T) {
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		t.Fatal("DATABASE_URL is required")
+	}
+
+	ctx := context.Background()
+
+	db, err := database.Connect(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("connect to database: %v", err)
+	}
+	t.Cleanup(func() {
+		db.Close()
+	})
+
+	repo := NewRepositoryRepository(db)
+
+	userID := uuid.NewString()
+	workspaceID := uuid.NewString()
+	projectID := uuid.NewString()
+	repositoryID := uuid.NewString()
+
+	email := "repository-sync-status-" + uuid.NewString() + "@example.com"
+
+	_, err = db.Pool.Exec(
+		ctx,
+		`
+		INSERT INTO users (id, email)
+		VALUES ($1, $2)
+		`,
+		userID,
+		email,
+	)
+	if err != nil {
+		t.Fatalf("insert test user: %v", err)
+	}
+
+	t.Cleanup(func() {
+		_, err := db.Pool.Exec(
+			context.Background(),
+			"DELETE FROM users WHERE id = $1",
+			userID,
+		)
+		if err != nil {
+			t.Errorf("cleanup test user: %v", err)
+		}
+	})
+
+	_, err = db.Pool.Exec(
+		ctx,
+		`
+		INSERT INTO workspaces (
+			id,
+			owner_id,
+			name
+		)
+		VALUES ($1, $2, $3)
+		`,
+		workspaceID,
+		userID,
+		"Repository Sync Status Workspace",
+	)
+	if err != nil {
+		t.Fatalf("insert test workspace: %v", err)
+	}
+
+	t.Cleanup(func() {
+		_, err := db.Pool.Exec(
+			context.Background(),
+			"DELETE FROM workspaces WHERE id = $1",
+			workspaceID,
+		)
+		if err != nil {
+			t.Errorf("cleanup test workspace: %v", err)
+		}
+	})
+
+	_, err = db.Pool.Exec(
+		ctx,
+		`
+		INSERT INTO projects (
+			id,
+			workspace_id,
+			name,
+			created_by
+		)
+		VALUES ($1, $2, $3, $4)
+		`,
+		projectID,
+		workspaceID,
+		"Repository Sync Status Project",
+		userID,
+	)
+	if err != nil {
+		t.Fatalf("insert test project: %v", err)
+	}
+
+	t.Cleanup(func() {
+		_, err := db.Pool.Exec(
+			context.Background(),
+			"DELETE FROM projects WHERE id = $1",
+			projectID,
+		)
+		if err != nil {
+			t.Errorf("cleanup test project: %v", err)
+		}
+	})
+
+	now := time.Now().UTC()
+
+	testRepository := &domain.Repository{
+		ID:            repositoryID,
+		ProjectID:     projectID,
+		Provider:      "github",
+		ExternalID:    uuid.NewString(),
+		Owner:         "test-owner",
+		Name:          "test-repository",
+		FullName:      "test-owner/test-repository",
+		DefaultBranch: "main",
+		HTMLURL:       "https://github.com/test-owner/test-repository",
+		CloneURL:      "https://github.com/test-owner/test-repository.git",
+		IsPrivate:     true,
+		SyncStatus:    "pending",
+		CreatedAt:     now,
+		UpdatedAt:     now,
+	}
+
+	err = repo.Create(ctx, testRepository)
+	if err != nil {
+		t.Fatalf("create repository: %v", err)
+	}
+	syncedAt := time.Now().UTC().Truncate(time.Microsecond)
+
+	err = repo.UpdateSyncStatus(
+		ctx,
+		repositoryID,
+		"synced",
+		&syncedAt,
+	)
+	if err != nil {
+		t.Fatalf("update repository sync status: %v", err)
+	}
+
+	var (
+		storedSyncStatus   string
+		storedLastSyncedAt *time.Time
+	)
+
+	err = db.Pool.QueryRow(
+		ctx,
+		`
+		SELECT
+			sync_status,
+			last_synced_at
+		FROM repositories
+		WHERE id = $1
+		`,
+		repositoryID,
+	).Scan(
+		&storedSyncStatus,
+		&storedLastSyncedAt,
+	)
+	if err != nil {
+		t.Fatalf("query updated repository: %v", err)
+	}
+
+	if storedSyncStatus != "synced" {
+		t.Fatalf(
+			"expected sync status synced, got %s",
+			storedSyncStatus,
+		)
+	}
+
+	if storedLastSyncedAt == nil {
+		t.Fatal("expected last synced at to be set")
+	}
+
+	if !storedLastSyncedAt.Equal(syncedAt) {
+		t.Fatalf(
+			"expected last synced at %v, got %v",
+			syncedAt,
+			*storedLastSyncedAt,
+		)
+	}
+}
+func TestRepositoryRepositoryUpdateSyncStatusNotFound(t *testing.T) {
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		t.Fatal("DATABASE_URL is required")
+	}
+
+	ctx := context.Background()
+
+	db, err := database.Connect(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("connect to database: %v", err)
+	}
+	t.Cleanup(func() {
+		db.Close()
+	})
+
+	repo := NewRepositoryRepository(db)
+
+	err = repo.UpdateSyncStatus(
+		ctx,
+		uuid.NewString(),
+		"synced",
+		func() *time.Time {
+			now := time.Now().UTC().Truncate(time.Microsecond)
+			return &now
+		}(),
+	)
+	if !errors.Is(err, ErrRepositoryNotFound) {
+		t.Fatalf(
+			"expected ErrRepositoryNotFound, got %v",
+			err,
+		)
+	}
+}

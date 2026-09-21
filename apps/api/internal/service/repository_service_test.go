@@ -70,6 +70,14 @@ func (f *fakeRepositoryRepository) FindByProviderExternalID(
 
 	return f.findResult, f.findErr
 }
+func (f *fakeRepositoryRepository) UpdateSyncStatus(
+	ctx context.Context,
+	id string,
+	status string,
+	lastSyncedAt *time.Time,
+) error {
+	return nil
+}
 
 func (f *fakeRepositoryRepository) Delete(
 	ctx context.Context,

@@ -68,6 +68,16 @@ func (f *fakeClient) ListRepositories(
 	return nil, nil
 }
 
+func (f *fakeClient) GetLatestCommitSHA(
+	ctx context.Context,
+	installationID string,
+	owner string,
+	repository string,
+	branch string,
+) (string, error) {
+	return "abc123", nil
+}
+
 func TestClientContract(t *testing.T) {
 	var client Client = &fakeClient{}
 

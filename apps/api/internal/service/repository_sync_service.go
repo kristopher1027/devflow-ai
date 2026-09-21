@@ -3,6 +3,9 @@ package service
 import (
 	"context"
 	"errors"
+	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/kristopher1027/devflow-ai/internal/domain"
 	"github.com/kristopher1027/devflow-ai/internal/integration/github"
@@ -93,6 +96,41 @@ func (s *RepositorySyncServiceImpl) Sync(
 	if commitSHA == "" {
 		return nil, ErrRepositorySyncCommitNotFound
 	}
+	existingSnapshot, err := s.snapshotRepo.FindByRepositoryIDAndCommitSHA(
+		ctx,
+		repositoryID,
+		commitSHA,
+	)
+	if err == nil {
+		return existingSnapshot, nil
+	}
 
-	return nil, nil
+	if !errors.Is(err, repository.ErrRepositorySnapshotNotFound) {
+		return nil, err
+	}
+
+	snapshot := &domain.RepositorySnapshot{
+		ID:           uuid.NewString(),
+		RepositoryID: repo.ID,
+		CommitSHA:    commitSHA,
+		Branch:       repo.DefaultBranch,
+		CreatedAt:    time.Now().UTC(),
+	}
+
+	if err := s.snapshotRepo.Create(ctx, snapshot); err != nil {
+		return nil, err
+	}
+
+	syncedAt := time.Now().UTC()
+
+	if err := s.repositoryRepo.UpdateSyncStatus(
+		ctx,
+		repositoryID,
+		"synced",
+		&syncedAt,
+	); err != nil {
+		return nil, err
+	}
+
+	return snapshot, nil
 }

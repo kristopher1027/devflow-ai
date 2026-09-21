@@ -3,15 +3,21 @@ package service
 import (
 	"context"
 	"errors"
+	"github.com/google/uuid"
 	"testing"
+	"time"
 
 	"github.com/kristopher1027/devflow-ai/internal/domain"
 	"github.com/kristopher1027/devflow-ai/internal/repository"
 )
 
 type fakeRepositorySyncRepository struct {
-	repository *domain.Repository
-	err        error
+	repository      *domain.Repository
+	err             error
+	updateCalls     int
+	updatedStatus   string
+	updatedSyncedAt *time.Time
+	updateErr       error
 }
 
 func (f *fakeRepositorySyncRepository) Create(
@@ -43,6 +49,19 @@ func (f *fakeRepositorySyncRepository) FindByProviderExternalID(
 	return nil, nil
 }
 
+func (f *fakeRepositorySyncRepository) UpdateSyncStatus(
+	ctx context.Context,
+	id string,
+	status string,
+	lastSyncedAt *time.Time,
+) error {
+	f.updateCalls++
+	f.updatedStatus = status
+	f.updatedSyncedAt = lastSyncedAt
+
+	return f.updateErr
+}
+
 func (f *fakeRepositorySyncRepository) Delete(
 	ctx context.Context,
 	id string,
@@ -51,11 +70,11 @@ func (f *fakeRepositorySyncRepository) Delete(
 }
 
 type fakeRepositorySnapshotRepository struct {
-	findCalls      int
-	createCalls    int
-	snapshot       *domain.RepositorySnapshot
-	findErr        error
-	createErr      error
+	findCalls       int
+	createCalls     int
+	snapshot        *domain.RepositorySnapshot
+	findErr         error
+	createErr       error
 	createdSnapshot *domain.RepositorySnapshot
 }
 
@@ -82,6 +101,7 @@ func (f *fakeRepositorySnapshotRepository) ListByRepositoryID(
 ) ([]*domain.RepositorySnapshot, error) {
 	return nil, nil
 }
+
 type fakeRepositoryClient struct {
 	calls          int
 	owner          string
@@ -148,6 +168,57 @@ func TestRepositorySyncServiceRepositoryNotFound(t *testing.T) {
 	if snapshotRepo.createCalls != 0 {
 		t.Fatalf(
 			"expected snapshot creation not to be called, got %d calls",
+			snapshotRepo.createCalls,
+		)
+	}
+}
+func TestRepositorySyncServicePropagatesSnapshotCreateError(t *testing.T) {
+	ctx := context.Background()
+
+	expectedErr := errors.New("snapshot create failed")
+
+	repo := &domain.Repository{
+		ID:            "repository-1",
+		Owner:         "octocat",
+		Name:          "hello-world",
+		DefaultBranch: "main",
+	}
+
+	repositoryRepo := &fakeRepositorySyncRepository{
+		repository: repo,
+	}
+
+	snapshotRepo := &fakeRepositorySnapshotRepository{
+		findErr:   repository.ErrRepositorySnapshotNotFound,
+		createErr: expectedErr,
+	}
+
+	githubClient := &fakeRepositoryClient{
+		commitSHA: "abc123",
+	}
+
+	service := NewRepositorySyncService(
+		repositoryRepo,
+		snapshotRepo,
+		githubClient,
+	)
+
+	snapshot, err := service.Sync(ctx, repo.ID)
+
+	if !errors.Is(err, expectedErr) {
+		t.Fatalf(
+			"expected snapshot create error, got %v",
+			err,
+		)
+	}
+
+	if snapshot != nil {
+		t.Fatalf("expected nil snapshot, got %#v", snapshot)
+	}
+
+	if snapshotRepo.createCalls != 1 {
+		t.Fatalf(
+			"expected 1 snapshot create call, got %d",
 			snapshotRepo.createCalls,
 		)
 	}
@@ -420,6 +491,239 @@ func TestRepositorySyncServicePropagatesGitHubError(t *testing.T) {
 		t.Fatalf(
 			"expected snapshot creation not to be called, got %d calls",
 			snapshotRepo.createCalls,
+		)
+	}
+}
+func (f *fakeRepositorySnapshotRepository) FindByRepositoryIDAndCommitSHA(
+	ctx context.Context,
+	repositoryID string,
+	commitSHA string,
+) (*domain.RepositorySnapshot, error) {
+	f.findCalls++
+
+	return f.snapshot, f.findErr
+}
+func TestRepositorySyncServiceReturnsExistingSnapshot(t *testing.T) {
+	existingSnapshot := &domain.RepositorySnapshot{
+		ID:           "snapshot-id",
+		RepositoryID: "repository-id",
+		CommitSHA:    "abc123",
+		Branch:       "main",
+	}
+
+	repositoryRepo := &fakeRepositorySyncRepository{
+		repository: &domain.Repository{
+			ID:            "repository-id",
+			Owner:         "devflow-test",
+			Name:          "sync-test-repository",
+			DefaultBranch: "main",
+		},
+	}
+
+	snapshotRepo := &fakeRepositorySnapshotRepository{
+		snapshot: existingSnapshot,
+	}
+
+	githubClient := &fakeRepositoryClient{
+		commitSHA: "abc123",
+	}
+
+	service := NewRepositorySyncService(
+		repositoryRepo,
+		snapshotRepo,
+		githubClient,
+	)
+
+	result, err := service.Sync(
+		context.Background(),
+		"repository-id",
+	)
+
+	if err != nil {
+		t.Fatalf("sync failed: %v", err)
+	}
+
+	if result != existingSnapshot {
+		t.Fatal("expected existing snapshot to be returned")
+	}
+
+	if snapshotRepo.createCalls != 0 {
+		t.Fatalf(
+			"expected no snapshot creation, got %d calls",
+			snapshotRepo.createCalls,
+		)
+	}
+}
+func TestRepositorySyncServiceCreatesNewSnapshot(t *testing.T) {
+	repositoryRepo := &fakeRepositorySyncRepository{
+		repository: &domain.Repository{
+			ID:            "repository-id",
+			Owner:         "devflow-test",
+			Name:          "sync-test-repository",
+			DefaultBranch: "main",
+		},
+	}
+
+	snapshotRepo := &fakeRepositorySnapshotRepository{
+		findErr: repository.ErrRepositorySnapshotNotFound,
+	}
+
+	githubClient := &fakeRepositoryClient{
+		commitSHA: "abc123",
+	}
+
+	service := NewRepositorySyncService(
+		repositoryRepo,
+		snapshotRepo,
+		githubClient,
+	)
+
+	result, err := service.Sync(
+		context.Background(),
+		"repository-id",
+	)
+
+	if err != nil {
+		t.Fatalf("sync failed: %v", err)
+	}
+
+	if result == nil {
+		t.Fatal("expected new snapshot, got nil")
+	}
+
+	if result.RepositoryID != "repository-id" {
+		t.Fatalf(
+			"expected repository ID %q, got %q",
+			"repository-id",
+			result.RepositoryID,
+		)
+	}
+
+	if result.CommitSHA != "abc123" {
+		t.Fatalf(
+			"expected commit SHA %q, got %q",
+			"abc123",
+			result.CommitSHA,
+		)
+	}
+
+	if result.Branch != "main" {
+		t.Fatalf(
+			"expected branch %q, got %q",
+			"main",
+			result.Branch,
+		)
+	}
+
+	if snapshotRepo.createCalls != 1 {
+		t.Fatalf(
+			"expected snapshot creation once, got %d calls",
+			snapshotRepo.createCalls,
+		)
+	}
+}
+func TestRepositorySyncServiceUpdatesRepositoryStatusAfterSuccessfulSync(t *testing.T) {
+	repositoryID := uuid.NewString()
+
+	repo := &domain.Repository{
+		ID:            repositoryID,
+		ProjectID:     uuid.NewString(),
+		Owner:         "devflow-test",
+		Name:          "sync-test-repository",
+		DefaultBranch: "main",
+	}
+
+	repositoryRepo := &fakeRepositorySyncRepository{
+		repository: repo,
+	}
+
+	snapshotRepo := &fakeRepositorySnapshotRepository{
+		findErr: repository.ErrRepositorySnapshotNotFound,
+	}
+
+	githubClient := &fakeRepositoryClient{
+		commitSHA: "abc123",
+	}
+
+	service := NewRepositorySyncService(
+		repositoryRepo,
+		snapshotRepo,
+		githubClient,
+	)
+
+	_, err := service.Sync(
+		context.Background(),
+		repositoryID,
+	)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if repositoryRepo.updateCalls != 1 {
+		t.Fatalf(
+			"expected UpdateSyncStatus to be called once, got %d",
+			repositoryRepo.updateCalls,
+		)
+	}
+
+	if repositoryRepo.updatedStatus != "synced" {
+		t.Fatalf(
+			"expected status %q, got %q",
+			"synced",
+			repositoryRepo.updatedStatus,
+		)
+	}
+
+	if repositoryRepo.updatedSyncedAt == nil {
+		t.Fatal("expected lastSyncedAt to be set")
+	}
+}
+func TestRepositorySyncServicePropagatesUpdateSyncStatusError(t *testing.T) {
+	repositoryID := uuid.NewString()
+	updateErr := errors.New("update sync status failed")
+
+	repo := &domain.Repository{
+		ID:            repositoryID,
+		ProjectID:     uuid.NewString(),
+		Owner:         "devflow-test",
+		Name:          "sync-test-repository",
+		DefaultBranch: "main",
+	}
+
+	repositoryRepo := &fakeRepositorySyncRepository{
+		repository: repo,
+		updateErr:  updateErr,
+	}
+
+	snapshotRepo := &fakeRepositorySnapshotRepository{
+		findErr: repository.ErrRepositorySnapshotNotFound,
+	}
+
+	githubClient := &fakeRepositoryClient{
+		commitSHA: "abc123",
+	}
+
+	service := NewRepositorySyncService(
+		repositoryRepo,
+		snapshotRepo,
+		githubClient,
+	)
+
+	_, err := service.Sync(
+		context.Background(),
+		repositoryID,
+	)
+	if !errors.Is(err, updateErr) {
+		t.Fatalf(
+			"expected update sync status error, got %v",
+			err,
+		)
+	}
+
+	if repositoryRepo.updateCalls != 1 {
+		t.Fatalf(
+			"expected UpdateSyncStatus to be called once, got %d",
+			repositoryRepo.updateCalls,
 		)
 	}
 }

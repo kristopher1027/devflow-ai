@@ -80,6 +80,48 @@ func (c *unavailableClient) ListRepositories(
 	return nil, c.err
 }
 
+func (c *appClient) GetLatestCommitSHA(
+	ctx context.Context,
+	installationID string,
+	owner string,
+	repository string,
+	branch string,
+) (string, error) {
+
+	token, err := c.createInstallationToken(
+		ctx,
+		installationID,
+	)
+	if err != nil {
+		return "", err
+	}
+
+	request, err := c.newRequest(
+		ctx,
+		http.MethodGet,
+		"/repos/"+owner+"/"+repository+"/commits/"+branch,
+		"",
+		token,
+	)
+	if err != nil {
+		return "", err
+	}
+
+	var response struct {
+		SHA string `json:"sha"`
+	}
+
+	if err := c.doJSON(request, &response); err != nil {
+		return "", err
+	}
+
+	if response.SHA == "" {
+		return "", errors.New("github commit SHA missing")
+	}
+
+	return response.SHA, nil
+}
+
 type appClient struct {
 	appID      string
 	privateKey *rsa.PrivateKey
