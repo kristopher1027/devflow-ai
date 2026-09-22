@@ -33,6 +33,15 @@ func (f *fakeGitHubClient) ListRepositories(
 	}
 	return f.repositories, nil
 }
+func (f *fakeGitHubClient) GetLatestCommitSHA(
+	ctx context.Context,
+	installationID string,
+	owner string,
+	repository string,
+	branch string,
+) (string, error) {
+	return "", nil
+}
 
 type fakeGitHubConnectionServiceForImport struct {
 	connection     *domain.GitHubConnection

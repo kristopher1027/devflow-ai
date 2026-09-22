@@ -177,10 +177,11 @@ func main() {
 
 	repositorySyncService := service.NewRepositorySyncService(
 		repositoryRepository,
+		projectRepository,
+		githubConnectionRepository,
 		repositorySnapshotRepository,
 		githubClient,
 	)
-
 	repositorySyncWorker := service.NewRepositorySyncWorkerWithStore(
 		repositorySyncService,
 		32,

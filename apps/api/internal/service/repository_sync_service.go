@@ -41,20 +41,26 @@ var (
 )
 
 type RepositorySyncServiceImpl struct {
-	repositoryRepo repository.RepositoryRepository
-	snapshotRepo   repository.RepositorySnapshotRepository
-	githubClient   github.RepositoryClient
+	repositoryRepo       repository.RepositoryRepository
+	projectRepo          repository.ProjectRepository
+	githubConnectionRepo repository.GitHubConnectionRepository
+	snapshotRepo         repository.RepositorySnapshotRepository
+	githubClient         github.RepositoryClient
 }
 
 func NewRepositorySyncService(
 	repositoryRepo repository.RepositoryRepository,
+	projectRepo repository.ProjectRepository,
+	githubConnectionRepo repository.GitHubConnectionRepository,
 	snapshotRepo repository.RepositorySnapshotRepository,
 	githubClient github.RepositoryClient,
 ) RepositorySyncService {
 	return &RepositorySyncServiceImpl{
-		repositoryRepo: repositoryRepo,
-		snapshotRepo:   snapshotRepo,
-		githubClient:   githubClient,
+		repositoryRepo:       repositoryRepo,
+		projectRepo:          projectRepo,
+		githubConnectionRepo: githubConnectionRepo,
+		snapshotRepo:         snapshotRepo,
+		githubClient:         githubClient,
 	}
 }
 
@@ -83,12 +89,25 @@ func (s *RepositorySyncServiceImpl) Sync(
 		return nil, ErrRepositorySyncNameRequired
 	}
 
+	project, err := s.projectRepo.FindByID(ctx, repo.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	connection, err := s.githubConnectionRepo.FindByWorkspaceID(
+		ctx,
+		project.WorkspaceID,
+	)
+	if err != nil {
+		return nil, err
+	}
 	commitSHA, err := s.githubClient.GetLatestCommitSHA(
 		ctx,
+		connection.InstallationID,
 		repo.Owner,
 		repo.Name,
 		repo.DefaultBranch,
 	)
+
 	if err != nil {
 		return nil, err
 	}

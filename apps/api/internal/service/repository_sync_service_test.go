@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"errors"
-	"github.com/google/uuid"
 	"testing"
 	"time"
 
@@ -84,6 +83,7 @@ func (f *fakeRepositorySnapshotRepository) Create(
 ) error {
 	f.createCalls++
 	f.createdSnapshot = snapshot
+
 	return f.createErr
 }
 
@@ -92,6 +92,7 @@ func (f *fakeRepositorySnapshotRepository) FindByID(
 	id string,
 ) (*domain.RepositorySnapshot, error) {
 	f.findCalls++
+
 	return f.snapshot, f.findErr
 }
 
@@ -102,8 +103,19 @@ func (f *fakeRepositorySnapshotRepository) ListByRepositoryID(
 	return nil, nil
 }
 
+func (f *fakeRepositorySnapshotRepository) FindByRepositoryIDAndCommitSHA(
+	ctx context.Context,
+	repositoryID string,
+	commitSHA string,
+) (*domain.RepositorySnapshot, error) {
+	f.findCalls++
+
+	return f.snapshot, f.findErr
+}
+
 type fakeRepositoryClient struct {
 	calls          int
+	installationID string
 	owner          string
 	repositoryName string
 	branch         string
@@ -113,11 +125,13 @@ type fakeRepositoryClient struct {
 
 func (f *fakeRepositoryClient) GetLatestCommitSHA(
 	ctx context.Context,
+	installationID string,
 	owner string,
 	repositoryName string,
 	branch string,
 ) (string, error) {
 	f.calls++
+	f.installationID = installationID
 	f.owner = owner
 	f.repositoryName = repositoryName
 	f.branch = branch
@@ -131,10 +145,13 @@ func TestRepositorySyncServiceRepositoryNotFound(t *testing.T) {
 	}
 
 	snapshotRepo := &fakeRepositorySnapshotRepository{}
+
 	githubClient := &fakeRepositoryClient{}
 
 	service := NewRepositorySyncService(
 		repositoryRepo,
+		nil,
+		nil,
 		snapshotRepo,
 		githubClient,
 	)
@@ -172,6 +189,7 @@ func TestRepositorySyncServiceRepositoryNotFound(t *testing.T) {
 		)
 	}
 }
+
 func TestRepositorySyncServicePropagatesSnapshotCreateError(t *testing.T) {
 	ctx := context.Background()
 
@@ -179,6 +197,7 @@ func TestRepositorySyncServicePropagatesSnapshotCreateError(t *testing.T) {
 
 	repo := &domain.Repository{
 		ID:            "repository-1",
+		ProjectID:     "project-1",
 		Owner:         "octocat",
 		Name:          "hello-world",
 		DefaultBranch: "main",
@@ -186,6 +205,23 @@ func TestRepositorySyncServicePropagatesSnapshotCreateError(t *testing.T) {
 
 	repositoryRepo := &fakeRepositorySyncRepository{
 		repository: repo,
+	}
+
+	projectRepo := &fakeProjectRepository{
+		project: &domain.Project{
+			ID:          "project-1",
+			WorkspaceID: "workspace-1",
+		},
+	}
+
+	githubConnectionRepo := &fakeGitHubConnectionRepository{
+		connection: &domain.GitHubConnection{
+			ID:             "connection-1",
+			WorkspaceID:    "workspace-1",
+			InstallationID: "installation-123",
+			AccountLogin:   "devflow-test",
+			Status:         domain.GitHubConnectionStatusActive,
+		},
 	}
 
 	snapshotRepo := &fakeRepositorySnapshotRepository{
@@ -199,6 +235,8 @@ func TestRepositorySyncServicePropagatesSnapshotCreateError(t *testing.T) {
 
 	service := NewRepositorySyncService(
 		repositoryRepo,
+		projectRepo,
+		githubConnectionRepo,
 		snapshotRepo,
 		githubClient,
 	)
@@ -223,6 +261,7 @@ func TestRepositorySyncServicePropagatesSnapshotCreateError(t *testing.T) {
 		)
 	}
 }
+
 func TestRepositorySyncServicePropagatesRepositoryError(t *testing.T) {
 	expectedErr := errors.New("database unavailable")
 
@@ -235,6 +274,8 @@ func TestRepositorySyncServicePropagatesRepositoryError(t *testing.T) {
 
 	service := NewRepositorySyncService(
 		repositoryRepo,
+		nil,
+		nil,
 		snapshotRepo,
 		githubClient,
 	)
@@ -252,9 +293,7 @@ func TestRepositorySyncServicePropagatesRepositoryError(t *testing.T) {
 	}
 
 	if errors.Is(err, ErrRepositorySyncRepositoryNotFound) {
-		t.Fatal(
-			"unexpected ErrRepositorySyncRepositoryNotFound",
-		)
+		t.Fatal("unexpected ErrRepositorySyncRepositoryNotFound")
 	}
 
 	if githubClient.calls != 0 {
@@ -264,10 +303,12 @@ func TestRepositorySyncServicePropagatesRepositoryError(t *testing.T) {
 		)
 	}
 }
+
 func TestRepositorySyncServiceRequiresDefaultBranch(t *testing.T) {
 	repositoryRepo := &fakeRepositorySyncRepository{
 		repository: &domain.Repository{
 			ID:            "repository-id",
+			ProjectID:     "project-1",
 			Owner:         "devflow-test",
 			Name:          "sync-test-repository",
 			DefaultBranch: "",
@@ -279,6 +320,8 @@ func TestRepositorySyncServiceRequiresDefaultBranch(t *testing.T) {
 
 	service := NewRepositorySyncService(
 		repositoryRepo,
+		nil,
+		nil,
 		snapshotRepo,
 		githubClient,
 	)
@@ -309,10 +352,12 @@ func TestRepositorySyncServiceRequiresDefaultBranch(t *testing.T) {
 		)
 	}
 }
+
 func TestRepositorySyncServiceRequiresOwner(t *testing.T) {
 	repositoryRepo := &fakeRepositorySyncRepository{
 		repository: &domain.Repository{
 			ID:            "repository-id",
+			ProjectID:     "project-1",
 			Owner:         "",
 			Name:          "sync-test-repository",
 			DefaultBranch: "main",
@@ -324,6 +369,8 @@ func TestRepositorySyncServiceRequiresOwner(t *testing.T) {
 
 	service := NewRepositorySyncService(
 		repositoryRepo,
+		nil,
+		nil,
 		snapshotRepo,
 		githubClient,
 	)
@@ -347,10 +394,12 @@ func TestRepositorySyncServiceRequiresOwner(t *testing.T) {
 		)
 	}
 }
+
 func TestRepositorySyncServiceRequiresName(t *testing.T) {
 	repositoryRepo := &fakeRepositorySyncRepository{
 		repository: &domain.Repository{
 			ID:            "repository-id",
+			ProjectID:     "project-1",
 			Owner:         "devflow-test",
 			Name:          "",
 			DefaultBranch: "main",
@@ -362,6 +411,8 @@ func TestRepositorySyncServiceRequiresName(t *testing.T) {
 
 	service := NewRepositorySyncService(
 		repositoryRepo,
+		nil,
+		nil,
 		snapshotRepo,
 		githubClient,
 	)
@@ -387,12 +438,32 @@ func TestRepositorySyncServiceRequiresName(t *testing.T) {
 }
 
 func TestRepositorySyncServiceGetsLatestCommit(t *testing.T) {
+	repo := &domain.Repository{
+		ID:            "repository-id",
+		ProjectID:     "project-1",
+		Owner:         "devflow-test",
+		Name:          "sync-test-repository",
+		DefaultBranch: "main",
+	}
+
 	repositoryRepo := &fakeRepositorySyncRepository{
-		repository: &domain.Repository{
-			ID:            "repository-id",
-			Owner:         "devflow-test",
-			Name:          "sync-test-repository",
-			DefaultBranch: "main",
+		repository: repo,
+	}
+
+	projectRepo := &fakeProjectRepository{
+		project: &domain.Project{
+			ID:          "project-1",
+			WorkspaceID: "workspace-1",
+		},
+	}
+
+	githubConnectionRepo := &fakeGitHubConnectionRepository{
+		connection: &domain.GitHubConnection{
+			ID:             "connection-1",
+			WorkspaceID:    "workspace-1",
+			InstallationID: "installation-123",
+			AccountLogin:   "devflow-test",
+			Status:         domain.GitHubConnectionStatusActive,
 		},
 	}
 
@@ -404,19 +475,33 @@ func TestRepositorySyncServiceGetsLatestCommit(t *testing.T) {
 
 	service := NewRepositorySyncService(
 		repositoryRepo,
+		projectRepo,
+		githubConnectionRepo,
 		snapshotRepo,
 		githubClient,
 	)
 
-	_, _ = service.Sync(
+	_, err := service.Sync(
 		context.Background(),
-		"repository-id",
+		repo.ID,
 	)
+
+	if err != nil {
+		t.Fatalf("sync failed: %v", err)
+	}
 
 	if githubClient.calls != 1 {
 		t.Fatalf(
 			"expected GitHub client to be called once, got %d calls",
 			githubClient.calls,
+		)
+	}
+
+	if githubClient.installationID != "installation-123" {
+		t.Fatalf(
+			"expected installation ID %q, got %q",
+			"installation-123",
+			githubClient.installationID,
 		)
 	}
 
@@ -444,15 +529,36 @@ func TestRepositorySyncServiceGetsLatestCommit(t *testing.T) {
 		)
 	}
 }
+
 func TestRepositorySyncServicePropagatesGitHubError(t *testing.T) {
 	expectedErr := errors.New("github unavailable")
 
+	repo := &domain.Repository{
+		ID:            "repository-id",
+		ProjectID:     "project-1",
+		Owner:         "devflow-test",
+		Name:          "sync-test-repository",
+		DefaultBranch: "main",
+	}
+
 	repositoryRepo := &fakeRepositorySyncRepository{
-		repository: &domain.Repository{
-			ID:            "repository-id",
-			Owner:         "devflow-test",
-			Name:          "sync-test-repository",
-			DefaultBranch: "main",
+		repository: repo,
+	}
+
+	projectRepo := &fakeProjectRepository{
+		project: &domain.Project{
+			ID:          "project-1",
+			WorkspaceID: "workspace-1",
+		},
+	}
+
+	githubConnectionRepo := &fakeGitHubConnectionRepository{
+		connection: &domain.GitHubConnection{
+			ID:             "connection-1",
+			WorkspaceID:    "workspace-1",
+			InstallationID: "installation-123",
+			AccountLogin:   "devflow-test",
+			Status:         domain.GitHubConnectionStatusActive,
 		},
 	}
 
@@ -464,13 +570,15 @@ func TestRepositorySyncServicePropagatesGitHubError(t *testing.T) {
 
 	service := NewRepositorySyncService(
 		repositoryRepo,
+		projectRepo,
+		githubConnectionRepo,
 		snapshotRepo,
 		githubClient,
 	)
 
 	_, err := service.Sync(
 		context.Background(),
-		"repository-id",
+		repo.ID,
 	)
 
 	if !errors.Is(err, expectedErr) {
@@ -494,15 +602,7 @@ func TestRepositorySyncServicePropagatesGitHubError(t *testing.T) {
 		)
 	}
 }
-func (f *fakeRepositorySnapshotRepository) FindByRepositoryIDAndCommitSHA(
-	ctx context.Context,
-	repositoryID string,
-	commitSHA string,
-) (*domain.RepositorySnapshot, error) {
-	f.findCalls++
 
-	return f.snapshot, f.findErr
-}
 func TestRepositorySyncServiceReturnsExistingSnapshot(t *testing.T) {
 	existingSnapshot := &domain.RepositorySnapshot{
 		ID:           "snapshot-id",
@@ -511,12 +611,32 @@ func TestRepositorySyncServiceReturnsExistingSnapshot(t *testing.T) {
 		Branch:       "main",
 	}
 
+	repo := &domain.Repository{
+		ID:            "repository-id",
+		ProjectID:     "project-1",
+		Owner:         "devflow-test",
+		Name:          "sync-test-repository",
+		DefaultBranch: "main",
+	}
+
 	repositoryRepo := &fakeRepositorySyncRepository{
-		repository: &domain.Repository{
-			ID:            "repository-id",
-			Owner:         "devflow-test",
-			Name:          "sync-test-repository",
-			DefaultBranch: "main",
+		repository: repo,
+	}
+
+	projectRepo := &fakeProjectRepository{
+		project: &domain.Project{
+			ID:          "project-1",
+			WorkspaceID: "workspace-1",
+		},
+	}
+
+	githubConnectionRepo := &fakeGitHubConnectionRepository{
+		connection: &domain.GitHubConnection{
+			ID:             "connection-1",
+			WorkspaceID:    "workspace-1",
+			InstallationID: "installation-123",
+			AccountLogin:   "devflow-test",
+			Status:         domain.GitHubConnectionStatusActive,
 		},
 	}
 
@@ -530,13 +650,15 @@ func TestRepositorySyncServiceReturnsExistingSnapshot(t *testing.T) {
 
 	service := NewRepositorySyncService(
 		repositoryRepo,
+		projectRepo,
+		githubConnectionRepo,
 		snapshotRepo,
 		githubClient,
 	)
 
 	result, err := service.Sync(
 		context.Background(),
-		"repository-id",
+		repo.ID,
 	)
 
 	if err != nil {
@@ -553,14 +675,42 @@ func TestRepositorySyncServiceReturnsExistingSnapshot(t *testing.T) {
 			snapshotRepo.createCalls,
 		)
 	}
+
+	if repositoryRepo.updateCalls != 0 {
+		t.Fatalf(
+			"expected repository status not to be updated, got %d calls",
+			repositoryRepo.updateCalls,
+		)
+	}
 }
+
 func TestRepositorySyncServiceCreatesNewSnapshot(t *testing.T) {
+	repo := &domain.Repository{
+		ID:            "repository-id",
+		ProjectID:     "project-1",
+		Owner:         "devflow-test",
+		Name:          "sync-test-repository",
+		DefaultBranch: "main",
+	}
+
 	repositoryRepo := &fakeRepositorySyncRepository{
-		repository: &domain.Repository{
-			ID:            "repository-id",
-			Owner:         "devflow-test",
-			Name:          "sync-test-repository",
-			DefaultBranch: "main",
+		repository: repo,
+	}
+
+	projectRepo := &fakeProjectRepository{
+		project: &domain.Project{
+			ID:          "project-1",
+			WorkspaceID: "workspace-1",
+		},
+	}
+
+	githubConnectionRepo := &fakeGitHubConnectionRepository{
+		connection: &domain.GitHubConnection{
+			ID:             "connection-1",
+			WorkspaceID:    "workspace-1",
+			InstallationID: "installation-123",
+			AccountLogin:   "devflow-test",
+			Status:         domain.GitHubConnectionStatusActive,
 		},
 	}
 
@@ -574,13 +724,15 @@ func TestRepositorySyncServiceCreatesNewSnapshot(t *testing.T) {
 
 	service := NewRepositorySyncService(
 		repositoryRepo,
+		projectRepo,
+		githubConnectionRepo,
 		snapshotRepo,
 		githubClient,
 	)
 
 	result, err := service.Sync(
 		context.Background(),
-		"repository-id",
+		repo.ID,
 	)
 
 	if err != nil {
@@ -591,10 +743,10 @@ func TestRepositorySyncServiceCreatesNewSnapshot(t *testing.T) {
 		t.Fatal("expected new snapshot, got nil")
 	}
 
-	if result.RepositoryID != "repository-id" {
+	if result.RepositoryID != repo.ID {
 		t.Fatalf(
 			"expected repository ID %q, got %q",
-			"repository-id",
+			repo.ID,
 			result.RepositoryID,
 		)
 	}
@@ -621,13 +773,16 @@ func TestRepositorySyncServiceCreatesNewSnapshot(t *testing.T) {
 			snapshotRepo.createCalls,
 		)
 	}
-}
-func TestRepositorySyncServiceUpdatesRepositoryStatusAfterSuccessfulSync(t *testing.T) {
-	repositoryID := uuid.NewString()
 
+	if snapshotRepo.createdSnapshot == nil {
+		t.Fatal("expected created snapshot to be captured")
+	}
+}
+
+func TestRepositorySyncServiceUpdatesRepositoryStatusAfterSuccessfulSync(t *testing.T) {
 	repo := &domain.Repository{
-		ID:            repositoryID,
-		ProjectID:     uuid.NewString(),
+		ID:            "repository-id",
+		ProjectID:     "project-1",
 		Owner:         "devflow-test",
 		Name:          "sync-test-repository",
 		DefaultBranch: "main",
@@ -635,6 +790,23 @@ func TestRepositorySyncServiceUpdatesRepositoryStatusAfterSuccessfulSync(t *test
 
 	repositoryRepo := &fakeRepositorySyncRepository{
 		repository: repo,
+	}
+
+	projectRepo := &fakeProjectRepository{
+		project: &domain.Project{
+			ID:          "project-1",
+			WorkspaceID: "workspace-1",
+		},
+	}
+
+	githubConnectionRepo := &fakeGitHubConnectionRepository{
+		connection: &domain.GitHubConnection{
+			ID:             "connection-1",
+			WorkspaceID:    "workspace-1",
+			InstallationID: "installation-123",
+			AccountLogin:   "devflow-test",
+			Status:         domain.GitHubConnectionStatusActive,
+		},
 	}
 
 	snapshotRepo := &fakeRepositorySnapshotRepository{
@@ -647,14 +819,17 @@ func TestRepositorySyncServiceUpdatesRepositoryStatusAfterSuccessfulSync(t *test
 
 	service := NewRepositorySyncService(
 		repositoryRepo,
+		projectRepo,
+		githubConnectionRepo,
 		snapshotRepo,
 		githubClient,
 	)
 
 	_, err := service.Sync(
 		context.Background(),
-		repositoryID,
+		repo.ID,
 	)
+
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -678,13 +853,13 @@ func TestRepositorySyncServiceUpdatesRepositoryStatusAfterSuccessfulSync(t *test
 		t.Fatal("expected lastSyncedAt to be set")
 	}
 }
+
 func TestRepositorySyncServicePropagatesUpdateSyncStatusError(t *testing.T) {
-	repositoryID := uuid.NewString()
 	updateErr := errors.New("update sync status failed")
 
 	repo := &domain.Repository{
-		ID:            repositoryID,
-		ProjectID:     uuid.NewString(),
+		ID:            "repository-id",
+		ProjectID:     "project-1",
 		Owner:         "devflow-test",
 		Name:          "sync-test-repository",
 		DefaultBranch: "main",
@@ -693,6 +868,23 @@ func TestRepositorySyncServicePropagatesUpdateSyncStatusError(t *testing.T) {
 	repositoryRepo := &fakeRepositorySyncRepository{
 		repository: repo,
 		updateErr:  updateErr,
+	}
+
+	projectRepo := &fakeProjectRepository{
+		project: &domain.Project{
+			ID:          "project-1",
+			WorkspaceID: "workspace-1",
+		},
+	}
+
+	githubConnectionRepo := &fakeGitHubConnectionRepository{
+		connection: &domain.GitHubConnection{
+			ID:             "connection-1",
+			WorkspaceID:    "workspace-1",
+			InstallationID: "installation-123",
+			AccountLogin:   "devflow-test",
+			Status:         domain.GitHubConnectionStatusActive,
+		},
 	}
 
 	snapshotRepo := &fakeRepositorySnapshotRepository{
@@ -705,14 +897,17 @@ func TestRepositorySyncServicePropagatesUpdateSyncStatusError(t *testing.T) {
 
 	service := NewRepositorySyncService(
 		repositoryRepo,
+		projectRepo,
+		githubConnectionRepo,
 		snapshotRepo,
 		githubClient,
 	)
 
 	_, err := service.Sync(
 		context.Background(),
-		repositoryID,
+		repo.ID,
 	)
+
 	if !errors.Is(err, updateErr) {
 		t.Fatalf(
 			"expected update sync status error, got %v",

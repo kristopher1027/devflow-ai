@@ -56,6 +56,14 @@ type Client interface {
 		ctx context.Context,
 		installationID string,
 	) ([]Repository, error)
+
+	GetLatestCommitSHA(
+		ctx context.Context,
+		installationID string,
+		owner string,
+		repository string,
+		branch string,
+	) (string, error)
 }
 
 type unavailableClient struct {
@@ -78,6 +86,15 @@ func (c *unavailableClient) ListRepositories(
 	installationID string,
 ) ([]Repository, error) {
 	return nil, c.err
+}
+func (c *unavailableClient) GetLatestCommitSHA(
+	ctx context.Context,
+	installationID string,
+	owner string,
+	repository string,
+	branch string,
+) (string, error) {
+	return "", c.err
 }
 
 func (c *appClient) GetLatestCommitSHA(
