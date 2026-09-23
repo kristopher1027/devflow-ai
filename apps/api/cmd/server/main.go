@@ -191,6 +191,16 @@ func main() {
 		},
 		repositorySyncJobRepository,
 	)
+	repositorySyncRequestService := service.NewRepositorySyncRequestService(
+		repositoryRepository,
+		projectRepository,
+		workspaceMemberRepository,
+		repositorySyncWorker,
+	)
+
+	repositorySyncRequestHandler := devflowhttp.NewRepositorySyncRequestHandler(
+		repositorySyncRequestService,
+	)
 	githubRepositoryImportHandler := devflowhttp.NewGitHubRepositoryImportHandler(
 		githubRepositoryImportWorker,
 	)
@@ -212,6 +222,7 @@ func main() {
 		githubRepositoryImportJobHandler,
 		githubConnectionHandler,
 		repositorySyncJobHandler,
+		repositorySyncRequestHandler,
 		authMiddleware,
 	)
 

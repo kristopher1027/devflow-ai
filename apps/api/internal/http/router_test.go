@@ -11,6 +11,20 @@ import (
 	"github.com/kristopher1027/devflow-ai/internal/service"
 )
 
+type routerFakeRepositorySyncRequestService struct{}
+
+func (f *routerFakeRepositorySyncRequestService) RequestSync(
+	ctx context.Context,
+	requesterID string,
+	repositoryID string,
+) (*domain.RepositorySyncJob, error) {
+	return &domain.RepositorySyncJob{
+		ID:           "test-sync-job",
+		RepositoryID: repositoryID,
+		Status:       domain.RepositorySyncJobStatusPending,
+	}, nil
+}
+
 type routerFakeUserService struct{}
 
 func (f *routerFakeUserService) FindUserByEmail(
@@ -200,8 +214,11 @@ func newTestRouter() http.Handler {
 		&fakeGitHubConnectionService{},
 	)
 	repositorySyncJobHandler := NewRepositorySyncJobHandler(
-	&fakeRepositorySyncJobService{},
-)
+		&fakeRepositorySyncJobService{},
+	)
+	repositorySyncRequestHandler := NewRepositorySyncRequestHandler(
+		&routerFakeRepositorySyncRequestService{},
+	)
 
 	authMiddleware := NewAuthMiddleware(
 		&routerFakeAuthService{},
@@ -219,6 +236,7 @@ func newTestRouter() http.Handler {
 		githubRepositoryImportJobHandler,
 		githubConnectionHandler,
 		repositorySyncJobHandler,
+		repositorySyncRequestHandler,
 		authMiddleware,
 	)
 }

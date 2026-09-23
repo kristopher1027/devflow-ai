@@ -14,6 +14,7 @@ func NewRouter(
 	githubRepositoryImportJobHandler *GitHubRepositoryImportJobHandler,
 	githubConnectionHandler *GitHubConnectionHandler,
 	repositorySyncJobHandler *RepositorySyncJobHandler,
+	repositorySyncRequestHandler *RepositorySyncRequestHandler,
 	authMiddleware *AuthMiddleware,
 ) http.Handler {
 	mux := http.NewServeMux()
@@ -112,8 +113,11 @@ func NewRouter(
 	protectedUpdateGitHubConnectionStatus := authMiddleware.RequireAuth(
 		http.HandlerFunc(githubConnectionHandler.UpdateStatus),
 	)
+	protectedRequestRepositorySync := authMiddleware.RequireAuth(
+		http.HandlerFunc(repositorySyncRequestHandler.RequestSync),
+	)
 	protectedGetRepositorySyncJob := authMiddleware.RequireAuth(
-	http.HandlerFunc(repositorySyncJobHandler.GetByID),
+		http.HandlerFunc(repositorySyncJobHandler.GetByID),
 	)
 
 	mux.Handle("/workspaces", http.HandlerFunc(func(
@@ -200,11 +204,15 @@ func NewRouter(
 		w http.ResponseWriter,
 		r *http.Request,
 	) {
-		switch r.Method {
-		case http.MethodGet:
+		switch {
+		case r.Method == http.MethodPost &&
+			hasSuffix(r.URL.Path, "/sync"):
+			protectedRequestRepositorySync.ServeHTTP(w, r)
+
+		case r.Method == http.MethodGet:
 			protectedGetRepository.ServeHTTP(w, r)
 
-		case http.MethodDelete:
+		case r.Method == http.MethodDelete:
 			protectedDeleteRepository.ServeHTTP(w, r)
 
 		default:
@@ -231,20 +239,20 @@ func NewRouter(
 		protectedGetImportJob.ServeHTTP(w, r)
 	}))
 	mux.Handle("/repositories/sync-jobs/", http.HandlerFunc(func(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
-	if r.Method != http.MethodGet {
-		http.Error(
-			w,
-			"method not allowed",
-			http.StatusMethodNotAllowed,
-		)
-		return
-	}
+		w http.ResponseWriter,
+		r *http.Request,
+	) {
+		if r.Method != http.MethodGet {
+			http.Error(
+				w,
+				"method not allowed",
+				http.StatusMethodNotAllowed,
+			)
+			return
+		}
 
-	protectedGetRepositorySyncJob.ServeHTTP(w, r)
-}))
+		protectedGetRepositorySyncJob.ServeHTTP(w, r)
+	}))
 	mux.Handle("/projects/", http.HandlerFunc(func(
 		w http.ResponseWriter,
 		r *http.Request,
