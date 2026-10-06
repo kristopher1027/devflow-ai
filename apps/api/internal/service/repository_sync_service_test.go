@@ -3,11 +3,11 @@ package service
 import (
 	"context"
 	"errors"
+	"github.com/kristopher1027/devflow-ai/internal/domain"
+	"github.com/kristopher1027/devflow-ai/internal/integration/github"
+	"github.com/kristopher1027/devflow-ai/internal/repository"
 	"testing"
 	"time"
-
-	"github.com/kristopher1027/devflow-ai/internal/domain"
-	"github.com/kristopher1027/devflow-ai/internal/repository"
 )
 
 type fakeRepositorySyncRepository struct {
@@ -137,6 +137,25 @@ func (f *fakeRepositoryClient) GetLatestCommitSHA(
 	f.branch = branch
 
 	return f.commitSHA, f.err
+}
+func (f *fakeRepositoryClient) GetTree(
+	ctx context.Context,
+	installationID string,
+	owner string,
+	repositoryName string,
+	treeSHA string,
+) (*github.RepositoryTree, error) {
+	return nil, nil
+}
+
+func (f *fakeRepositoryClient) GetBlob(
+	ctx context.Context,
+	installationID string,
+	owner string,
+	repositoryName string,
+	blobSHA string,
+) (*github.RepositoryBlob, error) {
+	return nil, nil
 }
 
 func TestRepositorySyncServiceRepositoryNotFound(t *testing.T) {

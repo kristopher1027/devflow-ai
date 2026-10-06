@@ -43,6 +43,26 @@ func (f *fakeGitHubClient) GetLatestCommitSHA(
 	return "", nil
 }
 
+func (f *fakeGitHubClient) GetTree(
+	ctx context.Context,
+	installationID string,
+	owner string,
+	repository string,
+	treeSHA string,
+) (*githubintegration.RepositoryTree, error) {
+	return nil, nil
+}
+
+func (f *fakeGitHubClient) GetBlob(
+	ctx context.Context,
+	installationID string,
+	owner string,
+	repository string,
+	blobSHA string,
+) (*githubintegration.RepositoryBlob, error) {
+	return nil, nil
+}
+
 type fakeGitHubConnectionServiceForImport struct {
 	connection     *domain.GitHubConnection
 	err            error

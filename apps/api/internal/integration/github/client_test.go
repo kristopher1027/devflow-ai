@@ -77,6 +77,25 @@ func (f *fakeClient) GetLatestCommitSHA(
 ) (string, error) {
 	return "abc123", nil
 }
+func (f *fakeClient) GetTree(
+	ctx context.Context,
+	installationID string,
+	owner string,
+	repository string,
+	treeSHA string,
+) (*RepositoryTree, error) {
+	return nil, nil
+}
+
+func (f *fakeClient) GetBlob(
+	ctx context.Context,
+	installationID string,
+	owner string,
+	repository string,
+	blobSHA string,
+) (*RepositoryBlob, error) {
+	return nil, nil
+}
 
 func TestClientContract(t *testing.T) {
 	var client Client = &fakeClient{}

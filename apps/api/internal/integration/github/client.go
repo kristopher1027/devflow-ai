@@ -47,6 +47,8 @@ type Repository struct {
 }
 
 type Client interface {
+	RepositoryClient
+
 	GetInstallation(
 		ctx context.Context,
 		installationID string,
@@ -56,14 +58,6 @@ type Client interface {
 		ctx context.Context,
 		installationID string,
 	) ([]Repository, error)
-
-	GetLatestCommitSHA(
-		ctx context.Context,
-		installationID string,
-		owner string,
-		repository string,
-		branch string,
-	) (string, error)
 }
 
 type unavailableClient struct {
@@ -278,6 +272,113 @@ func (c *appClient) ListRepositories(
 	}
 
 	return repositories, nil
+}
+
+func (c *appClient) GetTree(
+	ctx context.Context,
+	installationID string,
+	owner string,
+	repository string,
+	treeSHA string,
+) (*RepositoryTree, error) {
+	token, err := c.createInstallationToken(ctx, installationID)
+	if err != nil {
+		return nil, err
+	}
+
+	request, err := c.newRequest(
+		ctx,
+		http.MethodGet,
+		"/repos/"+owner+"/"+repository+"/git/trees/"+treeSHA+"?recursive=1",
+		"",
+		token,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	var response struct {
+		SHA       string `json:"sha"`
+		Truncated bool   `json:"truncated"`
+		Tree      []struct {
+			Path string `json:"path"`
+			Mode string `json:"mode"`
+			Type string `json:"type"`
+			SHA  string `json:"sha"`
+			Size int64  `json:"size"`
+		} `json:"tree"`
+	}
+
+	if err := c.doJSON(request, &response); err != nil {
+		return nil, err
+	}
+
+	if response.SHA == "" {
+		return nil, errors.New("github tree SHA is missing")
+	}
+
+	entries := make([]RepositoryTreeEntry, 0, len(response.Tree))
+
+	for _, entry := range response.Tree {
+		entries = append(entries, RepositoryTreeEntry{
+			Path: entry.Path,
+			Mode: entry.Mode,
+			Type: entry.Type,
+			SHA:  entry.SHA,
+			Size: entry.Size,
+		})
+	}
+
+	return &RepositoryTree{
+		SHA:       response.SHA,
+		Entries:   entries,
+		Truncated: response.Truncated,
+	}, nil
+}
+func (c *appClient) GetBlob(
+	ctx context.Context,
+	installationID string,
+	owner string,
+	repository string,
+	blobSHA string,
+) (*RepositoryBlob, error) {
+	token, err := c.createInstallationToken(ctx, installationID)
+	if err != nil {
+		return nil, err
+	}
+
+	request, err := c.newRequest(
+		ctx,
+		http.MethodGet,
+		"/repos/"+owner+"/"+repository+"/git/blobs/"+blobSHA,
+		"",
+		token,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	var response struct {
+		SHA      string `json:"sha"`
+		Content  string `json:"content"`
+		Encoding string `json:"encoding"`
+		Size     int64  `json:"size"`
+	}
+
+	if err := c.doJSON(request, &response); err != nil {
+		return nil, err
+	}
+
+	if response.SHA == "" {
+		return nil, errors.New("github blob SHA is missing")
+	}
+
+	return &RepositoryBlob{
+		SHA:      response.SHA,
+		Content:  response.Content,
+		Encoding: response.Encoding,
+		Size:     response.Size,
+	}, nil
 }
 
 func (c *appClient) createInstallationToken(
