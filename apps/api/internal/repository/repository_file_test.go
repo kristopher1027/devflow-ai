@@ -32,13 +32,11 @@ func setupRepositoryFileRepository(
 	if err := snapshotRepo.Create(ctx, snapshot); err != nil {
 		t.Fatalf("create repository snapshot: %v", err)
 	}
-
-	return ctx, NewRepositoryFileRepository(db), snapshot.ID
+	return ctx, NewRepositoryFileRepository(db), snapshot.ID, db
 }
 
 func TestRepositoryFileRepositoryCreateAndFind(t *testing.T) {
-	ctx, repo, snapshotID := setupRepositoryFileRepository(t)
-
+	ctx, repo, snapshotID, _ := setupRepositoryFileRepository(t)
 	language := "go"
 
 	file := &domain.RepositoryFile{
@@ -112,8 +110,7 @@ func TestRepositoryFileRepositoryCreateAndFind(t *testing.T) {
 func TestRepositoryFileRepositoryCreateAllowsNilLanguage(
 	t *testing.T,
 ) {
-	ctx, repo, snapshotID := setupRepositoryFileRepository(t)
-
+	ctx, repo, snapshotID, _ := setupRepositoryFileRepository(t)
 	file := &domain.RepositoryFile{
 		ID:         uuid.NewString(),
 		SnapshotID: snapshotID,
@@ -144,8 +141,7 @@ func TestRepositoryFileRepositoryCreateAllowsNilLanguage(
 func TestRepositoryFileRepositoryCreateRejectsDuplicatePath(
 	t *testing.T,
 ) {
-	ctx, repo, snapshotID := setupRepositoryFileRepository(t)
-
+	ctx, repo, snapshotID, _ := setupRepositoryFileRepository(t)
 	first := &domain.RepositoryFile{
 		ID:         uuid.NewString(),
 		SnapshotID: snapshotID,
@@ -179,8 +175,7 @@ func TestRepositoryFileRepositoryCreateRejectsDuplicatePath(
 }
 
 func TestRepositoryFileRepositoryFindNotFound(t *testing.T) {
-	ctx, repo, _ := setupRepositoryFileRepository(t)
-
+	ctx, repo, _, _ := setupRepositoryFileRepository(t)
 	_, err := repo.FindByID(ctx, uuid.NewString())
 	if !errors.Is(err, ErrRepositoryFileNotFound) {
 		t.Fatalf(
@@ -193,8 +188,7 @@ func TestRepositoryFileRepositoryFindNotFound(t *testing.T) {
 func TestRepositoryFileRepositoryListBySnapshotID(
 	t *testing.T,
 ) {
-	ctx, repo, snapshotID := setupRepositoryFileRepository(t)
-
+	ctx, repo, snapshotID, _ := setupRepositoryFileRepository(t)
 	files := []*domain.RepositoryFile{
 		{
 			ID:         uuid.NewString(),
@@ -268,8 +262,7 @@ func TestRepositoryFileRepositoryListBySnapshotID(
 func TestRepositoryFileRepositoryListBySnapshotIDUnknownSnapshot(
 	t *testing.T,
 ) {
-	ctx, repo, _ := setupRepositoryFileRepository(t)
-
+	ctx, repo, _, _ := setupRepositoryFileRepository(t)
 	files, err := repo.ListBySnapshotID(
 		ctx,
 		uuid.NewString(),
@@ -292,8 +285,7 @@ func TestRepositoryFileRepositoryListBySnapshotIDUnknownSnapshot(
 func TestRepositoryFileRepositorySnapshotDeleteCascadesFiles(
 	t *testing.T,
 ) {
-	ctx, repo, snapshotID := setupRepositoryFileRepository(t)
-
+	ctx, repo, snapshotID, _ := setupRepositoryFileRepository(t)
 	file := &domain.RepositoryFile{
 		ID:         uuid.NewString(),
 		SnapshotID: snapshotID,
