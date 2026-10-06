@@ -46,11 +46,9 @@ type WorkspaceMemberRepository interface {
 	) error
 }
 
-
 type PostgresWorkspaceMemberRepository struct {
 	db *database.DB
 }
-
 
 func NewWorkspaceMemberRepository(
 	db *database.DB,
@@ -60,7 +58,6 @@ func NewWorkspaceMemberRepository(
 		db: db,
 	}
 }
-
 
 func (r *PostgresWorkspaceMemberRepository) Create(
 	ctx context.Context,
@@ -96,7 +93,6 @@ func (r *PostgresWorkspaceMemberRepository) Create(
 	return nil
 }
 
-
 func (r *PostgresWorkspaceMemberRepository) Find(
 	ctx context.Context,
 	workspaceID string,
@@ -116,7 +112,6 @@ func (r *PostgresWorkspaceMemberRepository) Find(
 
 	var member domain.WorkspaceMember
 
-
 	err := r.db.Pool.QueryRow(
 		ctx,
 		query,
@@ -128,7 +123,6 @@ func (r *PostgresWorkspaceMemberRepository) Find(
 		&member.Role,
 		&member.CreatedAt,
 	)
-
 
 	if err != nil {
 
@@ -142,17 +136,13 @@ func (r *PostgresWorkspaceMemberRepository) Find(
 		)
 	}
 
-
-	return &member,nil
+	return &member, nil
 }
-
-
 
 func (r *PostgresWorkspaceMemberRepository) ListByWorkspaceID(
 	ctx context.Context,
 	workspaceID string,
-) ([]*domain.WorkspaceMember,error) {
-
+) ([]*domain.WorkspaceMember, error) {
 
 	query := `
 		SELECT
@@ -165,35 +155,29 @@ func (r *PostgresWorkspaceMemberRepository) ListByWorkspaceID(
 		ORDER BY created_at ASC
 	`
 
-
-	rows,err := r.db.Pool.Query(
+	rows, err := r.db.Pool.Query(
 		ctx,
 		query,
 		workspaceID,
 	)
 
-
 	if err != nil {
-		return nil,fmt.Errorf(
+		return nil, fmt.Errorf(
 			"list workspace members: %w",
 			err,
 		)
 	}
 
-
 	defer rows.Close()
-
 
 	members := make(
 		[]*domain.WorkspaceMember,
 		0,
 	)
 
-
-	for rows.Next(){
+	for rows.Next() {
 
 		var member domain.WorkspaceMember
-
 
 		err := rows.Scan(
 			&member.WorkspaceID,
@@ -202,14 +186,12 @@ func (r *PostgresWorkspaceMemberRepository) ListByWorkspaceID(
 			&member.CreatedAt,
 		)
 
-
 		if err != nil {
-			return nil,fmt.Errorf(
+			return nil, fmt.Errorf(
 				"scan workspace member: %w",
 				err,
 			)
 		}
-
 
 		members = append(
 			members,
@@ -217,22 +199,16 @@ func (r *PostgresWorkspaceMemberRepository) ListByWorkspaceID(
 		)
 	}
 
-
-
 	if err := rows.Err(); err != nil {
 
-		return nil,fmt.Errorf(
+		return nil, fmt.Errorf(
 			"iterate workspace members: %w",
 			err,
 		)
 	}
 
-
-	return members,nil
+	return members, nil
 }
-
-
-
 
 func (r *PostgresWorkspaceMemberRepository) UpdateRole(
 	ctx context.Context,
@@ -241,7 +217,6 @@ func (r *PostgresWorkspaceMemberRepository) UpdateRole(
 	role string,
 ) error {
 
-
 	query := `
 		UPDATE workspace_members
 		SET role=$1
@@ -249,15 +224,13 @@ func (r *PostgresWorkspaceMemberRepository) UpdateRole(
 		AND user_id=$3
 	`
 
-
-	result,err := r.db.Pool.Exec(
+	result, err := r.db.Pool.Exec(
 		ctx,
 		query,
 		role,
 		workspaceID,
 		userID,
 	)
-
 
 	if err != nil {
 
@@ -267,20 +240,13 @@ func (r *PostgresWorkspaceMemberRepository) UpdateRole(
 		)
 	}
 
-
-
-	if result.RowsAffected()==0 {
+	if result.RowsAffected() == 0 {
 
 		return ErrWorkspaceMemberNotFound
 	}
 
-
 	return nil
 }
-
-
-
-
 
 func (r *PostgresWorkspaceMemberRepository) Delete(
 	ctx context.Context,
@@ -288,21 +254,18 @@ func (r *PostgresWorkspaceMemberRepository) Delete(
 	userID string,
 ) error {
 
-
 	query := `
 		DELETE FROM workspace_members
 		WHERE workspace_id=$1
 		AND user_id=$2
 	`
 
-
-	result,err := r.db.Pool.Exec(
+	result, err := r.db.Pool.Exec(
 		ctx,
 		query,
 		workspaceID,
 		userID,
 	)
-
 
 	if err != nil {
 
@@ -312,13 +275,10 @@ func (r *PostgresWorkspaceMemberRepository) Delete(
 		)
 	}
 
-
-
-	if result.RowsAffected()==0 {
+	if result.RowsAffected() == 0 {
 
 		return ErrWorkspaceMemberNotFound
 	}
-
 
 	return nil
 }

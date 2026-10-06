@@ -21,9 +21,9 @@ type RepositorySyncJobService interface {
 }
 
 type RepositorySyncJobServiceImpl struct {
-	jobRepository     repository.RepositorySyncJobRepository
-	repositoryRepo    repository.RepositoryRepository
-	projectRepo       repository.ProjectRepository
+	jobRepository       repository.RepositorySyncJobRepository
+	repositoryRepo      repository.RepositoryRepository
+	projectRepo         repository.ProjectRepository
 	workspaceMemberRepo repository.WorkspaceMemberRepository
 }
 

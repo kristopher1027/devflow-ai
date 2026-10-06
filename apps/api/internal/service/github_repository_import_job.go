@@ -201,6 +201,30 @@ func (w *GitHubRepositoryImportWorker) runWithRetry(
 	return err
 }
 
+// RecoverInterruptedJobs marks jobs left pending or running by a previous
+// process as failed. The queue is in-memory, so such jobs can never resume.
+// Call it once at startup, before the worker starts and the API accepts
+// requests, passing the process start time.
+func (w *GitHubRepositoryImportWorker) RecoverInterruptedJobs(
+	ctx context.Context,
+	startedAt time.Time,
+) (int64, error) {
+	if w.jobs == nil {
+		return 0, nil
+	}
+	recovered, err := w.jobs.FailInterrupted(
+		ctx,
+		startedAt,
+		domain.GitHubRepositoryImportJobFailureCodeInterrupted,
+		"job was interrupted by a server restart; please retry the import",
+	)
+	if err != nil {
+		return 0, err
+	}
+	w.metrics.Failed.Add(uint64(recovered))
+	return recovered, nil
+}
+
 func (w *GitHubRepositoryImportWorker) Metrics() GitHubRepositoryImportMetricsSnapshot {
 	return w.metrics.Snapshot()
 }

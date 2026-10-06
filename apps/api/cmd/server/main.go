@@ -20,6 +20,7 @@ import (
 func main() {
 	cfg := config.Load()
 
+	processStartedAt := time.Now()
 	ctx := context.Background()
 
 	db, err := database.Connect(ctx, cfg.DatabaseURL)
@@ -206,6 +207,15 @@ func main() {
 	)
 	jobContext, cancelJobs := context.WithCancel(ctx)
 	defer cancelJobs()
+
+	if recovered, err := githubRepositoryImportWorker.RecoverInterruptedJobs(
+		ctx,
+		processStartedAt,
+	); err != nil {
+		log.Printf("recover interrupted import jobs: %v", err)
+	} else if recovered > 0 {
+		log.Printf("marked %d interrupted import jobs as failed", recovered)
+	}
 
 	go githubRepositoryImportWorker.Start(jobContext)
 	go repositorySyncWorker.Start(jobContext)

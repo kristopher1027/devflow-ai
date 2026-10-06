@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/kristopher1027/devflow-ai/internal/domain"
 )
@@ -135,12 +136,17 @@ func TestGitHubRepositoryImportWorkerEnqueue(t *testing.T) {
 		t.Fatalf("expected canceled enqueue, got %v", err)
 	}
 }
+
 type shutdownJobRepository struct {
-	markedFailed bool
-	jobID        string
-	attempts     int
-	code         string
-	message      string
+	interruptedBefore time.Time
+	interruptedCode   string
+	interruptedCount  int64
+	interruptedErr    error
+	markedFailed      bool
+	jobID             string
+	attempts          int
+	code              string
+	message           string
 }
 
 func (r *shutdownJobRepository) Create(
@@ -239,5 +245,63 @@ func TestGitHubRepositoryImportWorkerMarksQueuedJobFailedOnShutdown(t *testing.T
 
 	if importer.attempts != 0 {
 		t.Fatalf("expected importer not to run, got %d attempts", importer.attempts)
+	}
+}
+func (r *shutdownJobRepository) FailInterrupted(
+	ctx context.Context,
+	updatedBefore time.Time,
+	code string,
+	message string,
+) (int64, error) {
+	r.interruptedBefore = updatedBefore
+	r.interruptedCode = code
+	return r.interruptedCount, r.interruptedErr
+}
+
+func TestGitHubRepositoryImportWorkerRecoversInterruptedJobs(t *testing.T) {
+	jobs := &shutdownJobRepository{interruptedCount: 2}
+	worker := NewGitHubRepositoryImportWorkerWithStore(
+		&retryImportService{}, 1,
+		GitHubRepositoryImportRetryPolicy{MaxAttempts: 1}, jobs,
+	)
+	startedAt := time.Now()
+
+	recovered, err := worker.RecoverInterruptedJobs(context.Background(), startedAt)
+	if err != nil {
+		t.Fatalf("recover interrupted jobs: %v", err)
+	}
+	if recovered != 2 {
+		t.Fatalf("expected 2 recovered jobs, got %d", recovered)
+	}
+	if !jobs.interruptedBefore.Equal(startedAt) {
+		t.Fatal("expected recovery to use the process start time as cutoff")
+	}
+	if jobs.interruptedCode != domain.GitHubRepositoryImportJobFailureCodeInterrupted {
+		t.Fatalf("unexpected failure code: %q", jobs.interruptedCode)
+	}
+	if worker.Metrics().Failed != 2 {
+		t.Fatalf("expected failed metric 2, got %d", worker.Metrics().Failed)
+	}
+}
+
+func TestGitHubRepositoryImportWorkerRecoverPropagatesError(t *testing.T) {
+	jobs := &shutdownJobRepository{interruptedErr: errors.New("db down")}
+	worker := NewGitHubRepositoryImportWorkerWithStore(
+		&retryImportService{}, 1,
+		GitHubRepositoryImportRetryPolicy{MaxAttempts: 1}, jobs,
+	)
+	if _, err := worker.RecoverInterruptedJobs(context.Background(), time.Now()); err == nil {
+		t.Fatal("expected error to propagate")
+	}
+}
+
+func TestGitHubRepositoryImportWorkerRecoverWithoutStore(t *testing.T) {
+	worker := NewGitHubRepositoryImportWorker(
+		&retryImportService{}, 1,
+		GitHubRepositoryImportRetryPolicy{MaxAttempts: 1},
+	)
+	recovered, err := worker.RecoverInterruptedJobs(context.Background(), time.Now())
+	if err != nil || recovered != 0 {
+		t.Fatalf("expected no-op, got %d, %v", recovered, err)
 	}
 }

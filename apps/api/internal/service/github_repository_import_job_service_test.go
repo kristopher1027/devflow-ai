@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -23,7 +24,6 @@ func (f *fakeGitHubRepositoryImportJobRepository) Create(
 ) error {
 	return nil
 }
-
 
 func (f *fakeGitHubRepositoryImportJobRepository) FindByID(
 	ctx context.Context,
@@ -62,6 +62,15 @@ func (f *fakeGitHubRepositoryImportJobRepository) MarkFailed(
 	message string,
 ) error {
 	return nil
+}
+
+func (f *fakeGitHubRepositoryImportJobRepository) FailInterrupted(
+	ctx context.Context,
+	updatedBefore time.Time,
+	code string,
+	message string,
+) (int64, error) {
+	return 0, nil
 }
 
 type fakeProjectRepositoryForImportJob struct {

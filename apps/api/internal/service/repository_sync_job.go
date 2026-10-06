@@ -11,8 +11,6 @@ import (
 	"github.com/kristopher1027/devflow-ai/internal/repository"
 )
 
-
-
 type RepositorySyncRequest struct {
 	JobID        string
 	RepositoryID string

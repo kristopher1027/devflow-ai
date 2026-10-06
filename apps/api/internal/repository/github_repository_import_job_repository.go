@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -19,6 +20,9 @@ type GitHubRepositoryImportJobRepository interface {
 	MarkRunning(ctx context.Context, id string, attempts int) error
 	MarkSucceeded(ctx context.Context, id string, attempts int) error
 	MarkFailed(ctx context.Context, id string, attempts int, code string, message string) error
+	// FailInterrupted marks pending/running jobs last updated before
+	// updatedBefore as failed and returns how many were changed.
+	FailInterrupted(ctx context.Context, updatedBefore time.Time, code string, message string) (int64, error)
 }
 
 type PostgresGitHubRepositoryImportJobRepository struct {
@@ -120,4 +124,25 @@ func (r *PostgresGitHubRepositoryImportJobRepository) update(
 		return ErrGitHubRepositoryImportJobNotFound
 	}
 	return nil
+}
+
+func (r *PostgresGitHubRepositoryImportJobRepository) FailInterrupted(
+	ctx context.Context,
+	updatedBefore time.Time,
+	code string,
+	message string,
+) (int64, error) {
+	result, err := r.db.Pool.Exec(ctx, `
+		UPDATE github_repository_import_jobs
+		SET status = $1, failure_code = $2, failure_message = $3,
+		    updated_at = NOW(), completed_at = NOW()
+		WHERE status IN ($4, $5) AND updated_at < $6
+	`, domain.GitHubRepositoryImportJobStatusFailed, code, message,
+		domain.GitHubRepositoryImportJobStatusPending,
+		domain.GitHubRepositoryImportJobStatusRunning,
+		updatedBefore)
+	if err != nil {
+		return 0, fmt.Errorf("fail interrupted github repository import jobs: %w", err)
+	}
+	return result.RowsAffected(), nil
 }

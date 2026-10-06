@@ -3,11 +3,12 @@ package domain
 import "time"
 
 const (
-	GitHubRepositoryImportJobStatusPending   = "pending"
-	GitHubRepositoryImportJobStatusRunning   = "running"
-	GitHubRepositoryImportJobStatusSucceeded = "succeeded"
-	GitHubRepositoryImportJobStatusFailed    = "failed"
+	GitHubRepositoryImportJobStatusPending             = "pending"
+	GitHubRepositoryImportJobStatusRunning             = "running"
+	GitHubRepositoryImportJobStatusSucceeded           = "succeeded"
+	GitHubRepositoryImportJobStatusFailed              = "failed"
 	GitHubRepositoryImportJobFailureCodeWorkerShutdown = "worker_shutdown"
+	GitHubRepositoryImportJobFailureCodeInterrupted    = "worker_interrupted"
 )
 
 type GitHubRepositoryImportJob struct {

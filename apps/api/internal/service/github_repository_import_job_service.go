@@ -23,9 +23,9 @@ type GitHubRepositoryImportJobService interface {
 }
 
 type GitHubRepositoryImportJobServiceImpl struct {
-	jobs    repository.GitHubRepositoryImportJobRepository
+	jobs     repository.GitHubRepositoryImportJobRepository
 	projects repository.ProjectRepository
-	members repository.WorkspaceMemberRepository
+	members  repository.WorkspaceMemberRepository
 }
 
 func NewGitHubRepositoryImportJobService(

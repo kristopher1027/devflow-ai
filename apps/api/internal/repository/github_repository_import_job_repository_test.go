@@ -90,3 +90,57 @@ func TestGitHubRepositoryImportJobRepositoryNotFound(t *testing.T) {
 		t.Fatalf("expected not found error, got %v", err)
 	}
 }
+
+func TestGitHubRepositoryImportJobRepositoryFailInterrupted(t *testing.T) {
+	ctx, _, repo, userID, projectID := setupImportJobRepository(t)
+	stale := time.Now().Add(-time.Hour)
+	cutoff := time.Now().Add(-30 * time.Minute)
+
+	newJob := func(status string, updatedAt time.Time) *domain.GitHubRepositoryImportJob {
+		job := &domain.GitHubRepositoryImportJob{
+			ID: uuid.NewString(), RequesterID: userID, ProjectID: projectID,
+			Status: status, CreatedAt: updatedAt, UpdatedAt: updatedAt,
+		}
+		if err := repo.Create(ctx, job); err != nil {
+			t.Fatalf("create import job: %v", err)
+		}
+		return job
+	}
+
+	stalePending := newJob(domain.GitHubRepositoryImportJobStatusPending, stale)
+	staleRunning := newJob(domain.GitHubRepositoryImportJobStatusRunning, stale)
+	staleDone := newJob(domain.GitHubRepositoryImportJobStatusSucceeded, stale)
+	freshRunning := newJob(domain.GitHubRepositoryImportJobStatusRunning, time.Now())
+
+	// The cutoff is 30 minutes ago, so jobs from other tests (fresh) are untouched.
+	n, err := repo.FailInterrupted(ctx, cutoff,
+		domain.GitHubRepositoryImportJobFailureCodeInterrupted, "restart")
+	if err != nil {
+		t.Fatalf("fail interrupted: %v", err)
+	}
+	if n < 2 {
+		t.Fatalf("expected at least 2 recovered jobs, got %d", n)
+	}
+
+	for _, id := range []string{stalePending.ID, staleRunning.ID} {
+		got, err := repo.FindByID(ctx, id)
+		if err != nil {
+			t.Fatalf("find job: %v", err)
+		}
+		if got.Status != domain.GitHubRepositoryImportJobStatusFailed ||
+			got.FailureCode == nil ||
+			*got.FailureCode != domain.GitHubRepositoryImportJobFailureCodeInterrupted ||
+			got.CompletedAt == nil {
+			t.Fatalf("job %s not recovered: %+v", id, got)
+		}
+	}
+
+	done, _ := repo.FindByID(ctx, staleDone.ID)
+	if done.Status != domain.GitHubRepositoryImportJobStatusSucceeded {
+		t.Fatalf("finished job must not change, got %q", done.Status)
+	}
+	fresh, _ := repo.FindByID(ctx, freshRunning.ID)
+	if fresh.Status != domain.GitHubRepositoryImportJobStatusRunning {
+		t.Fatalf("recent job must not change, got %q", fresh.Status)
+	}
+}
