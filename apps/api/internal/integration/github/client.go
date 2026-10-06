@@ -96,6 +96,25 @@ func (c *unavailableClient) GetLatestCommitSHA(
 ) (string, error) {
 	return "", c.err
 }
+func (c *unavailableClient) GetTree(
+	ctx context.Context,
+	installationID string,
+	owner string,
+	repository string,
+	treeSHA string,
+) (*RepositoryTree, error) {
+	return nil, c.err
+}
+
+func (c *unavailableClient) GetBlob(
+	ctx context.Context,
+	installationID string,
+	owner string,
+	repository string,
+	blobSHA string,
+) (*RepositoryBlob, error) {
+	return nil, c.err
+}
 
 func (c *appClient) GetLatestCommitSHA(
 	ctx context.Context,
