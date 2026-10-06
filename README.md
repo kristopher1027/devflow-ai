@@ -1,3 +1,7 @@
+![CI](https://github.com/kristopher1027/devflow-ai/actions/workflows/ci.yml/badge.svg)
+
+![CI](https://github.com/kristopher1027/devflow-ai/actions/workflows/ci.yml/badge.svg)
+
 # DevFlow AI
 
 **AI-powered engineering workspace for modern software development.**

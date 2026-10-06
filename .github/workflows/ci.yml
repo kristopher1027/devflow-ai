@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: devflow
+          POSTGRES_PASSWORD: devflowpassword
+          POSTGRES_DB: devflow
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U devflow"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://devflow:devflowpassword@localhost:5432/devflow?sslmode=disable
+
+    defaults:
+      run:
+        working-directory: apps/api
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/api/go.mod
+          cache-dependency-path: apps/api/go.sum
+
+      - name: Install migrate CLI
+        run: go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+
+      - name: Run migrations
+        run: migrate -path internal/database/migrations -database "$DATABASE_URL" up
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./...
