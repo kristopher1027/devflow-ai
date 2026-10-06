@@ -212,6 +212,177 @@ func TestClientListRepositoriesUsesInstallationToken(t *testing.T) {
 		t.Fatalf("expected installation token, got %s", requests[1].Header.Get("Authorization"))
 	}
 }
+func TestClientGetTree(t *testing.T) {
+	requests := make([]*http.Request, 0, 2)
+
+	httpClient := &http.Client{
+		Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			requests = append(requests, request)
+
+			if request.URL.Path == "/app/installations/12345/access_tokens" {
+				return jsonResponse(
+					http.StatusCreated,
+					`{"token":"installation-token"}`,
+				), nil
+			}
+
+			return jsonResponse(
+				http.StatusOK,
+				`{
+					"sha":"tree-sha-123",
+					"truncated":false,
+					"tree":[
+						{
+							"path":"README.md",
+							"mode":"100644",
+							"type":"blob",
+							"sha":"blob-sha-1",
+							"size":120
+						},
+						{
+							"path":"internal",
+							"mode":"040000",
+							"type":"tree",
+							"sha":"tree-sha-2"
+						}
+					]
+				}`,
+			), nil
+		}),
+	}
+
+	client, err := NewClient(
+		testGitHubAppConfig(t),
+		httpClient,
+		"https://github.test",
+	)
+	if err != nil {
+		t.Fatalf("create github client: %v", err)
+	}
+
+	tree, err := client.GetTree(
+		context.Background(),
+		"12345",
+		"devflow",
+		"api",
+		"commit-sha-123",
+	)
+	if err != nil {
+		t.Fatalf("get tree: %v", err)
+	}
+
+	if tree.SHA != "tree-sha-123" {
+		t.Fatalf("expected tree SHA tree-sha-123, got %s", tree.SHA)
+	}
+
+	if tree.Truncated {
+		t.Fatal("expected tree to not be truncated")
+	}
+
+	if len(tree.Entries) != 2 {
+		t.Fatalf("expected two tree entries, got %d", len(tree.Entries))
+	}
+
+	if tree.Entries[0].Path != "README.md" ||
+		tree.Entries[0].Type != "blob" ||
+		tree.Entries[0].SHA != "blob-sha-1" ||
+		tree.Entries[0].Size != 120 {
+		t.Fatalf("unexpected first tree entry: %+v", tree.Entries[0])
+	}
+
+	if len(requests) != 2 {
+		t.Fatalf("expected two requests, got %d", len(requests))
+	}
+
+	if requests[1].URL.String() !=
+		"https://github.test/repos/devflow/api/git/trees/commit-sha-123?recursive=1" {
+		t.Fatalf("unexpected tree URL: %s", requests[1].URL)
+	}
+
+	if requests[1].Header.Get("Authorization") != "Bearer installation-token" {
+		t.Fatalf("expected installation token, got %s",
+			requests[1].Header.Get("Authorization"))
+	}
+}
+
+func TestClientGetBlob(t *testing.T) {
+	requests := make([]*http.Request, 0, 2)
+
+	httpClient := &http.Client{
+		Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			requests = append(requests, request)
+
+			if request.URL.Path == "/app/installations/12345/access_tokens" {
+				return jsonResponse(
+					http.StatusCreated,
+					`{"token":"installation-token"}`,
+				), nil
+			}
+
+			return jsonResponse(
+				http.StatusOK,
+				`{
+					"sha":"blob-sha-123",
+					"node_id":"abc",
+					"size":42,
+					"url":"https://api.github.com/repos/devflow/api/git/blobs/blob-sha-123",
+					"content":"package main\n\nfunc main() {}\n",
+					"encoding":"utf-8"
+				}`,
+			), nil
+		}),
+	}
+
+	client, err := NewClient(
+		testGitHubAppConfig(t),
+		httpClient,
+		"https://github.test",
+	)
+	if err != nil {
+		t.Fatalf("create github client: %v", err)
+	}
+
+	blob, err := client.GetBlob(
+		context.Background(),
+		"12345",
+		"devflow",
+		"api",
+		"blob-sha-123",
+	)
+	if err != nil {
+		t.Fatalf("get blob: %v", err)
+	}
+
+	if blob.SHA != "blob-sha-123" {
+		t.Fatalf("expected blob SHA blob-sha-123, got %s", blob.SHA)
+	}
+
+	if blob.Encoding != "utf-8" {
+		t.Fatalf("expected utf-8 encoding, got %s", blob.Encoding)
+	}
+
+	if blob.Size != 42 {
+		t.Fatalf("expected size 42, got %d", blob.Size)
+	}
+
+	if blob.Content != "package main\n\nfunc main() {}\n" {
+		t.Fatalf("unexpected blob content: %q", blob.Content)
+	}
+
+	if len(requests) != 2 {
+		t.Fatalf("expected two requests, got %d", len(requests))
+	}
+
+	if requests[1].URL.String() !=
+		"https://github.test/repos/devflow/api/git/blobs/blob-sha-123" {
+		t.Fatalf("unexpected blob URL: %s", requests[1].URL)
+	}
+
+	if requests[1].Header.Get("Authorization") != "Bearer installation-token" {
+		t.Fatalf("expected installation token, got %s",
+			requests[1].Header.Get("Authorization"))
+	}
+}
 
 func TestClientUnexpectedStatus(t *testing.T) {
 	httpClient := &http.Client{
