@@ -2,7 +2,6 @@ package service
 
 import (
 	"errors"
-	"fmt"
 	"strconv"
 	"strings"
 
@@ -105,4 +104,3 @@ func (p *RepositoryAIContextPackagerImpl) Package(
 
 var _ RepositoryAIContextPackager = (*RepositoryAIContextPackagerImpl)(nil)
 
-var _ = fmt.Sprintf
