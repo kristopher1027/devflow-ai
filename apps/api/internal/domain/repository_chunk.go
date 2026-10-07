@@ -17,4 +17,6 @@ type RepositoryChunkSearchResult struct {
 	Chunk      *RepositoryChunk
 	FilePath   string
 	Language   *string
+	Score      float64
+	MatchedTerms []string
 }
