@@ -2,7 +2,6 @@ package service
 
 import (
 	"errors"
-	"fmt"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -169,4 +168,3 @@ func cloneLanguage(language *string) *string {
 
 var _ RepositoryRetrievalContextBuilder = (*RepositoryRetrievalContextBuilderImpl)(nil)
 
-var _ = fmt.Sprintf
