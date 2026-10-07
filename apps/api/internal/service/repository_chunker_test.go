@@ -22,16 +22,16 @@ func TestRepositoryChunkerIsDeterministicAndLineAware(t *testing.T) {
 	second := chunker.Chunk(file)
 
 	require.Equal(t, first, second)
-	require.Len(t, first, 3)
-	require.Equal(t, 1, first[0].ChunkIndex)
+	require.Len(t, first, 2)
+	require.Equal(t, 0, first[0].ChunkIndex)
 	require.Equal(t, 1, first[0].StartLine)
 	require.Equal(t, 3, first[0].EndLine)
 	require.Equal(t, "one\ntwo\nthree", first[0].Content)
+	require.Equal(t, 1, first[1].ChunkIndex)
 	require.Equal(t, 3, first[1].StartLine)
 	require.Equal(t, 5, first[1].EndLine)
 	require.Equal(t, "three\nfour\nfive", first[1].Content)
-	require.Equal(t, 0, first[0].ChunkIndex)
-	require.Equal(t, 1, first[0].CharacterCount)
+	require.Equal(t, 13, first[0].CharacterCount)
 }
 
 func TestRepositoryChunkerHandlesOversizedSingleLine(t *testing.T) {
