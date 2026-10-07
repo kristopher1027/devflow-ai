@@ -14,7 +14,7 @@ import (
 
 func setupRepositoryChunkRepository(t *testing.T) (context.Context, RepositoryChunkRepository, string, *database.DB) {
 	t.Helper()
-	ctx, db, snapshotID, _ := setupRepositoryFileRepository(t)
+	ctx, _, snapshotID, db := setupRepositoryFileRepository(t)
 	fileRepo := NewRepositoryFileRepository(db)
 	file := &domain.RepositoryFile{
 		ID: uuid.NewString(), SnapshotID: snapshotID,
