@@ -24,7 +24,22 @@ func (s *stubSyncService) Sync(
 	return s.snapshot, s.err
 }
 
-type stubChunkIngestionService struct {\n\terr        error\n\tsnapshotID string\n\tcalls      int\n}\n\nfunc (s *stubChunkIngestionService) Ingest(\n\tctx context.Context,\n\tsnapshotID string,\n) error {\n\ts.calls++\n\ts.snapshotID = snapshotID\n\treturn s.err\n}\n\ntype stubIngestionService struct {
+type stubChunkIngestionService struct {
+	err        error
+	snapshotID string
+	calls      int
+}
+
+func (s *stubChunkIngestionService) Ingest(
+	ctx context.Context,
+	snapshotID string,
+) error {
+	s.calls++
+	s.snapshotID = snapshotID
+	return s.err
+}
+
+type stubIngestionService struct {
 	err        error
 	snapshotID string
 	calls      int

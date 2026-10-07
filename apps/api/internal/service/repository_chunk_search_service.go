@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"sort"
+	"strings"
 	"unicode"
 
 	"github.com/kristopher1027/devflow-ai/internal/domain"
@@ -54,11 +54,16 @@ func (s *RepositoryChunkSearchServiceImpl) Search(
 		return nil, ErrRepositoryChunkSearchLimitInvalid
 	}
 
+	fetchLimit := limit
+	if fetchLimit < 3 {
+		fetchLimit = 3
+	}
+
 	results, err := s.chunkRepo.SearchBySnapshotID(
 		ctx,
 		snapshotID,
 		strings.TrimSpace(query),
-		limit*3,
+		fetchLimit,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("search repository chunks: %w", err)
@@ -78,25 +83,57 @@ func rankRepositoryChunkResults(
 	terms := tokenizeRepositorySearchQuery(query)
 
 	for _, result := range results {
-		if result == nil || result.Chunk == nil { continue }
+		if result == nil || result.Chunk == nil {
+			continue
+		}
 		result.Score = 0
 		result.MatchedTerms = nil
 		content := strings.ToLower(result.Chunk.Content)
 		path := strings.ToLower(result.FilePath)
 		for _, term := range terms {
 			matched := false
-			if strings.Contains(path, term) { result.Score += 5; matched = true }
-			if strings.Contains(content, term) { result.Score += 2; matched = true }
-			if matched { result.MatchedTerms = append(result.MatchedTerms, term) }
+			if count := strings.Count(path, term); count > 0 {
+				result.Score += float64(5 * count)
+				matched = true
+			}
+			if count := strings.Count(content, term); count > 0 {
+				result.Score += float64(2 * count)
+				matched = true
+			}
+			for _, segment := range strings.FieldsFunc(path, func(r rune) bool {
+				return r == '/' || r == '\\' || r == '.' || r == '-' || r == '_' || r == ' '
+			}) {
+				if len(segment) < 2 {
+					continue
+				}
+				if strings.Contains(term, segment) || strings.Contains(segment, term) {
+					result.Score += 4
+					matched = true
+				}
+			}
+			if matched {
+				result.MatchedTerms = append(result.MatchedTerms, term)
+			}
 		}
 	}
 
 	sort.SliceStable(results, func(i, j int) bool {
 		left, right := results[i], results[j]
-		if left == nil || left.Chunk == nil { return false }
-		if right == nil || right.Chunk == nil { return true }
-		if left.Score != right.Score { return left.Score > right.Score }
-		if left.FilePath != right.FilePath { return left.FilePath < right.FilePath }
+		if left == nil || left.Chunk == nil {
+			return false
+		}
+		if right == nil || right.Chunk == nil {
+			return true
+		}
+		if left.Score != right.Score {
+			return left.Score > right.Score
+		}
+		if len(left.FilePath) != len(right.FilePath) {
+			return len(left.FilePath) > len(right.FilePath)
+		}
+		if left.FilePath != right.FilePath {
+			return left.FilePath < right.FilePath
+		}
 		return left.Chunk.ChunkIndex < right.Chunk.ChunkIndex
 	})
 	return results
@@ -109,8 +146,12 @@ func tokenizeRepositorySearchQuery(query string) []string {
 	seen := make(map[string]struct{})
 	terms := make([]string, 0, len(fields))
 	for _, field := range fields {
-		if len([]rune(field)) < 2 { continue }
-		if _, ok := seen[field]; ok { continue }
+		if len([]rune(field)) < 2 {
+			continue
+		}
+		if _, ok := seen[field]; ok {
+			continue
+		}
 		seen[field] = struct{}{}
 		terms = append(terms, field)
 	}

@@ -68,6 +68,16 @@ func (c *RepositoryChunker) Chunk(
 	start := 0
 	for start < len(lines) {
 		end := c.endForLines(lines, start)
+		if c.OverlapLines > 0 && end < len(lines) {
+			trimmedEnd := end - c.OverlapLines
+			if trimmedEnd <= start {
+				trimmedEnd = start + 1
+			}
+			if trimmedEnd < end {
+				end = trimmedEnd
+			}
+		}
+
 		content := strings.Join(lines[start:end], "\n")
 
 		if content == "" {

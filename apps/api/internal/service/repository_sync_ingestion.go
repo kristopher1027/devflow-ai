@@ -21,12 +21,17 @@ type RepositorySyncWithIngestionService struct {
 func NewRepositorySyncWithIngestionService(
 	sync RepositorySyncService,
 	ingestion RepositoryIngestionService,
-	chunkIngestion RepositoryChunkIngestionService,
+	chunkIngestion ...RepositoryChunkIngestionService,
 ) RepositorySyncService {
+	var chunker RepositoryChunkIngestionService
+	if len(chunkIngestion) > 0 {
+		chunker = chunkIngestion[0]
+	}
+
 	return &RepositorySyncWithIngestionService{
-		sync:      sync,
+		sync:          sync,
 		ingestion:     ingestion,
-		chunkIngestion: chunkIngestion,
+		chunkIngestion: chunker,
 	}
 }
 
@@ -43,8 +48,10 @@ func (s *RepositorySyncWithIngestionService) Sync(
 		return nil, err
 	}
 
-	if err := s.chunkIngestion.Ingest(ctx, snapshot.ID); err != nil {
-		return nil, err
+	if s.chunkIngestion != nil {
+		if err := s.chunkIngestion.Ingest(ctx, snapshot.ID); err != nil {
+			return nil, err
+		}
 	}
 
 	return snapshot, nil

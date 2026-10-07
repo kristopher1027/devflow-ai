@@ -17,10 +17,18 @@ type fakeRepositoryChunkSearchRepository struct {
 	limit   int
 }
 
-func (f *fakeRepositoryChunkSearchRepository) Create(context.Context, *domain.RepositoryChunk) error { return nil }
-func (f *fakeRepositoryChunkSearchRepository) FindByID(context.Context, string) (*domain.RepositoryChunk, error) { return nil, nil }
-func (f *fakeRepositoryChunkSearchRepository) ListByFileID(context.Context, string) ([]*domain.RepositoryChunk, error) { return nil, nil }
-func (f *fakeRepositoryChunkSearchRepository) ReplaceByFileID(context.Context, string, []*domain.RepositoryChunk) error { return nil }
+func (f *fakeRepositoryChunkSearchRepository) Create(context.Context, *domain.RepositoryChunk) error {
+	return nil
+}
+func (f *fakeRepositoryChunkSearchRepository) FindByID(context.Context, string) (*domain.RepositoryChunk, error) {
+	return nil, nil
+}
+func (f *fakeRepositoryChunkSearchRepository) ListByFileID(context.Context, string) ([]*domain.RepositoryChunk, error) {
+	return nil, nil
+}
+func (f *fakeRepositoryChunkSearchRepository) ReplaceByFileID(context.Context, string, []*domain.RepositoryChunk) error {
+	return nil
+}
 func (f *fakeRepositoryChunkSearchRepository) SearchBySnapshotID(
 	_ context.Context, snapshotID, query string, limit int,
 ) ([]*domain.RepositoryChunkSearchResult, error) {

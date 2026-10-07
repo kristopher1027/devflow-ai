@@ -55,7 +55,6 @@ func (r *PostgresRepositoryChunkRepository) Create(
 	return nil
 }
 
-
 func (r *PostgresRepositoryChunkRepository) ReplaceByFileID(
 	ctx context.Context,
 	fileID string,
@@ -92,7 +91,6 @@ func (r *PostgresRepositoryChunkRepository) ReplaceByFileID(
 	}
 	return nil
 }
-
 
 func (r *PostgresRepositoryChunkRepository) SearchBySnapshotID(
 	ctx context.Context,

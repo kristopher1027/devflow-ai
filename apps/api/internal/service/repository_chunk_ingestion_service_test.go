@@ -45,6 +45,15 @@ func (f *fakeRepositoryChunkRepositoryForChunking) ListByFileID(context.Context,
 	return f.chunks["unused"], nil
 }
 
+func (f *fakeRepositoryChunkRepositoryForChunking) SearchBySnapshotID(
+	context.Context,
+	string,
+	string,
+	int,
+) ([]*domain.RepositoryChunkSearchResult, error) {
+	return nil, nil
+}
+
 func (f *fakeRepositoryChunkRepositoryForChunking) ReplaceByFileID(
 	_ context.Context,
 	fileID string,
