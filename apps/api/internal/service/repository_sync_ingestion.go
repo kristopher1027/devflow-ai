@@ -15,15 +15,18 @@ import (
 type RepositorySyncWithIngestionService struct {
 	sync      RepositorySyncService
 	ingestion RepositoryIngestionService
+	chunkIngestion RepositoryChunkIngestionService
 }
 
 func NewRepositorySyncWithIngestionService(
 	sync RepositorySyncService,
 	ingestion RepositoryIngestionService,
+	chunkIngestion RepositoryChunkIngestionService,
 ) RepositorySyncService {
 	return &RepositorySyncWithIngestionService{
 		sync:      sync,
-		ingestion: ingestion,
+		ingestion:     ingestion,
+		chunkIngestion: chunkIngestion,
 	}
 }
 
@@ -37,6 +40,10 @@ func (s *RepositorySyncWithIngestionService) Sync(
 	}
 
 	if err := s.ingestion.Ingest(ctx, snapshot.ID); err != nil {
+		return nil, err
+	}
+
+	if err := s.chunkIngestion.Ingest(ctx, snapshot.ID); err != nil {
 		return nil, err
 	}
 
