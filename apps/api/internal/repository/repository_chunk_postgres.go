@@ -93,6 +93,69 @@ func (r *PostgresRepositoryChunkRepository) ReplaceByFileID(
 	return nil
 }
 
+
+func (r *PostgresRepositoryChunkRepository) SearchBySnapshotID(
+	ctx context.Context,
+	snapshotID string,
+	query string,
+	limit int,
+) ([]*domain.RepositoryChunkSearchResult, error) {
+	if limit <= 0 {
+		return nil, fmt.Errorf("repository chunk search limit must be positive")
+	}
+
+	rows, err := r.db.Pool.Query(
+		ctx,
+		`
+		SELECT
+			c.id,
+			c.file_id,
+			c.chunk_index,
+			c.start_line,
+			c.end_line,
+			c.character_count,
+			c.content,
+			c.created_at,
+			f.path,
+			f.language
+		FROM repository_chunks c
+		INNER JOIN repository_files f ON f.id = c.file_id
+		WHERE f.snapshot_id = $1
+			AND (
+				c.content ILIKE '%' || $2 || '%'
+				OR f.path ILIKE '%' || $2 || '%'
+			)
+		ORDER BY f.path ASC, c.chunk_index ASC
+		LIMIT $3
+		`,
+		snapshotID,
+		query,
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("search repository chunks: %w", err)
+	}
+	defer rows.Close()
+
+	var results []*domain.RepositoryChunkSearchResult
+	for rows.Next() {
+		chunk := &domain.RepositoryChunk{}
+		result := &domain.RepositoryChunkSearchResult{Chunk: chunk}
+		if err := rows.Scan(
+			&chunk.ID, &chunk.FileID, &chunk.ChunkIndex,
+			&chunk.StartLine, &chunk.EndLine, &chunk.CharacterCount,
+			&chunk.Content, &chunk.CreatedAt, &result.FilePath, &result.Language,
+		); err != nil {
+			return nil, fmt.Errorf("scan repository chunk search result: %w", err)
+		}
+		results = append(results, result)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate repository chunk search results: %w", err)
+	}
+	return results, nil
+}
+
 func (r *PostgresRepositoryChunkRepository) FindByID(
 	ctx context.Context,
 	id string,
