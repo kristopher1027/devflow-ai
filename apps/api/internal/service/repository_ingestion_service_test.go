@@ -255,3 +255,46 @@ func TestDecodeTextBlobRejectsBadInput(t *testing.T) {
 	require.Equal(t, "hi", text)
 	require.True(t, strings.HasPrefix(text, "h"))
 }
+
+
+func TestRepositoryIngestionRejectsTruncatedTree(t *testing.T) {
+	client := &ingestGitHubClient{
+		tree: &github.RepositoryTree{
+			SHA:       "tree",
+			Truncated: true,
+			Entries: []github.RepositoryTreeEntry{
+				{
+					Path: "main.go",
+					Type: "blob",
+					SHA:  "sha-main",
+					Size: 20,
+				},
+			},
+		},
+	}
+
+	files := &ingestFileRepository{}
+
+	snapshots := &fakeRepositorySnapshotRepository{
+		snapshot: &domain.RepositorySnapshot{
+			ID:          "snap-1",
+			RepositoryID: "repo-1",
+			CommitSHA:   "commit-abc",
+		},
+	}
+
+	err := newIngestService(
+		snapshots,
+		files,
+		client,
+	).Ingest(context.Background(), "snap-1")
+
+	require.ErrorIs(
+		t,
+		err,
+		ErrRepositoryIngestionTreeTruncated,
+	)
+
+	require.Empty(t, files.created)
+	require.Empty(t, client.blobCalls)
+}
