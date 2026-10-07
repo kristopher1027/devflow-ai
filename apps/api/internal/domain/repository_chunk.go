@@ -12,3 +12,9 @@ type RepositoryChunk struct {
 	Content       string
 	CreatedAt     time.Time
 }
+
+type RepositoryChunkSearchResult struct {
+	Chunk      *RepositoryChunk
+	FilePath   string
+	Language   *string
+}
