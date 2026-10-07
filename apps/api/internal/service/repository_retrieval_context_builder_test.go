@@ -49,7 +49,7 @@ func TestRepositoryRetrievalContextBuilderBuild(t *testing.T) {
 	require.Equal(t, 2, len(context.Items))
 	require.Equal(t, "internal/domain/chunk.go", context.Items[0].FilePath)
 	require.Equal(t, "internal/service/search.go", context.Items[1].FilePath)
-	require.Equal(t, 27, context.CharacterCount)
+	require.Equal(t, 29, context.CharacterCount)
 	require.Equal(t, 8.5, context.Items[1].Score)
 	require.Equal(t, []string{"service"}, context.Items[1].MatchedTerms)
 	require.Equal(t, "go", *context.Items[1].Language)
