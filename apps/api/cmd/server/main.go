@@ -176,12 +176,26 @@ func main() {
 	)
 	repositorySnapshotRepository := repository.NewRepositorySnapshotRepository(db)
 
-	repositorySyncService := service.NewRepositorySyncService(
+	repositoryFileRepository := repository.NewRepositoryFileRepository(db)
+
+	baseRepositorySyncService := service.NewRepositorySyncService(
 		repositoryRepository,
 		projectRepository,
 		githubConnectionRepository,
 		repositorySnapshotRepository,
 		githubClient,
+	)
+	repositoryIngestionService := service.NewRepositoryIngestionService(
+		repositoryRepository,
+		projectRepository,
+		githubConnectionRepository,
+		repositorySnapshotRepository,
+		repositoryFileRepository,
+		githubClient,
+	)
+	repositorySyncService := service.NewRepositorySyncWithIngestionService(
+		baseRepositorySyncService,
+		repositoryIngestionService,
 	)
 	repositorySyncWorker := service.NewRepositorySyncWorkerWithStore(
 		repositorySyncService,
