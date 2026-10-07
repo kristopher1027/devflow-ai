@@ -66,3 +66,27 @@ func TestRepositoryChunkSearchPropagatesRepositoryError(t *testing.T) {
 	_, err := service.Search(context.Background(), "snapshot-1", "auth", 5)
 	require.ErrorIs(t, err, expected)
 }
+
+func TestRepositoryChunkSearchRanksResults(t *testing.T) {
+	repo := &fakeRepositoryChunkSearchRepository{results: []*domain.RepositoryChunkSearchResult{
+		{FilePath: "README.md", Chunk: &domain.RepositoryChunk{Content: "authentication"}},
+		{FilePath: "internal/auth/service.go", Chunk: &domain.RepositoryChunk{Content: "authentication"}},
+	}}
+	results, err := NewRepositoryChunkSearchService(repo).Search(context.Background(), "snapshot-1", "authentication", 5)
+	require.NoError(t, err)
+	require.Equal(t, "internal/auth/service.go", results[0].FilePath)
+	require.Greater(t, results[0].Score, results[1].Score)
+	require.Equal(t, []string{"authentication"}, results[0].MatchedTerms)
+}
+
+func TestRepositoryChunkSearchAppliesLimitAfterRanking(t *testing.T) {
+	repo := &fakeRepositoryChunkSearchRepository{results: []*domain.RepositoryChunkSearchResult{
+		{FilePath: "a.go", Chunk: &domain.RepositoryChunk{Content: "auth"}},
+		{FilePath: "b.go", Chunk: &domain.RepositoryChunk{Content: "authentication auth"}},
+	}}
+	results, err := NewRepositoryChunkSearchService(repo).Search(context.Background(), "snapshot-1", "auth", 1)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	require.Equal(t, "b.go", results[0].FilePath)
+	require.Equal(t, 3, repo.limit)
+}
