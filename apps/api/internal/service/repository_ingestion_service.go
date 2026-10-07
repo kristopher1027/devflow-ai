@@ -33,6 +33,9 @@ var (
 	ErrRepositoryIngestionRepositoryNotFound = errors.New(
 		"repository ingestion repository not found",
 	)
+	ErrRepositoryIngestionTreeTruncated = errors.New(
+		"repository ingestion tree is truncated",
+	)
 )
 
 type RepositoryIngestionService interface {
@@ -115,6 +118,10 @@ func (s *RepositoryIngestionServiceImpl) Ingest(
 	)
 	if err != nil {
 		return err
+	}
+
+	if tree.Truncated {
+		return ErrRepositoryIngestionTreeTruncated
 	}
 
 	existing, err := s.fileRepo.ListBySnapshotID(ctx, snapshot.ID)
