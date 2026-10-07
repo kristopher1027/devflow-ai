@@ -26,4 +26,10 @@ type RepositoryChunkRepository interface {
 		ctx context.Context,
 		fileID string,
 	) ([]*domain.RepositoryChunk, error)
+
+	ReplaceByFileID(
+		ctx context.Context,
+		fileID string,
+		chunks []*domain.RepositoryChunk,
+	) error
 }
