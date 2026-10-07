@@ -178,6 +178,8 @@ func main() {
 	repositorySnapshotRepository := repository.NewRepositorySnapshotRepository(db)
 
 	repositoryFileRepository := repository.NewRepositoryFileRepository(db)
+	repositoryChunkRepository := repository.NewRepositoryChunkRepository(db)
+	repositoryChunker := service.NewDefaultRepositoryChunker()
 
 	baseRepositorySyncService := service.NewRepositorySyncService(
 		repositoryRepository,
@@ -194,9 +196,15 @@ func main() {
 		repositoryFileRepository,
 		githubClient,
 	)
+	repositoryChunkIngestionService := service.NewRepositoryChunkIngestionService(
+		repositoryFileRepository,
+		repositoryChunkRepository,
+		repositoryChunker,
+	)
 	repositorySyncService := service.NewRepositorySyncWithIngestionService(
 		baseRepositorySyncService,
 		repositoryIngestionService,
+		repositoryChunkIngestionService,
 	)
 	var explainGenerator anthropic.TextGenerator
 	anthropicClient, anthropicErr := anthropic.NewClient(
