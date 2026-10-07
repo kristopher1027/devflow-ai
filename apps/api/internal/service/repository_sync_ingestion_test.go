@@ -24,7 +24,7 @@ func (s *stubSyncService) Sync(
 	return s.snapshot, s.err
 }
 
-type stubIngestionService struct {
+type stubChunkIngestionService struct {\n\terr        error\n\tsnapshotID string\n\tcalls      int\n}\n\nfunc (s *stubChunkIngestionService) Ingest(\n\tctx context.Context,\n\tsnapshotID string,\n) error {\n\ts.calls++\n\ts.snapshotID = snapshotID\n\treturn s.err\n}\n\ntype stubIngestionService struct {
 	err        error
 	snapshotID string
 	calls      int
@@ -44,7 +44,7 @@ func TestSyncWithIngestionIngestsTheSyncedSnapshot(t *testing.T) {
 	syncer := &stubSyncService{snapshot: snapshot}
 	ingester := &stubIngestionService{}
 
-	got, err := NewRepositorySyncWithIngestionService(syncer, ingester).
+	got, err := NewRepositorySyncWithIngestionService(syncer, ingester, &stubChunkIngestionService{}).
 		Sync(context.Background(), "repo-1")
 
 	require.NoError(t, err)
@@ -73,5 +73,33 @@ func TestSyncWithIngestionReturnsIngestionError(t *testing.T) {
 		Sync(context.Background(), "repo-1")
 
 	require.EqualError(t, err, "ingest failed")
+	require.Nil(t, got)
+}
+
+func TestSyncWithIngestionRunsChunkIngestionAfterFileIngestion(t *testing.T) {
+	snapshot := &domain.RepositorySnapshot{ID: "snap-1"}
+	syncer := &stubSyncService{snapshot: snapshot}
+	ingester := &stubIngestionService{}
+	chunker := &stubChunkIngestionService{}
+
+	got, err := NewRepositorySyncWithIngestionService(syncer, ingester, chunker).
+		Sync(context.Background(), "repo-1")
+
+	require.NoError(t, err)
+	require.Same(t, snapshot, got)
+	require.Equal(t, 1, ingester.calls)
+	require.Equal(t, 1, chunker.calls)
+	require.Equal(t, "snap-1", chunker.snapshotID)
+}
+
+func TestSyncWithIngestionReturnsChunkIngestionError(t *testing.T) {
+	syncer := &stubSyncService{snapshot: &domain.RepositorySnapshot{ID: "snap-1"}}
+	ingester := &stubIngestionService{}
+	chunker := &stubChunkIngestionService{err: errors.New("chunk ingest failed")}
+
+	got, err := NewRepositorySyncWithIngestionService(syncer, ingester, chunker).
+		Sync(context.Background(), "repo-1")
+
+	require.EqualError(t, err, "chunk ingest failed")
 	require.Nil(t, got)
 }
