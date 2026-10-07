@@ -62,15 +62,13 @@ func (c *RepositoryChunker) Chunk(
 		return nil
 	}
 
-	lines := strings.Split(file.Content, "
-")
+	lines := strings.Split(file.Content, "\n")
 	chunks := make([]*domain.RepositoryChunk, 0)
 
 	start := 0
 	for start < len(lines) {
 		end := c.endForLines(lines, start)
-		content := strings.Join(lines[start:end], "
-")
+		content := strings.Join(lines[start:end], "\n")
 
 		if content == "" {
 			start = end
