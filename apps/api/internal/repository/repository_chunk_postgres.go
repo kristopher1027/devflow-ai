@@ -55,6 +55,44 @@ func (r *PostgresRepositoryChunkRepository) Create(
 	return nil
 }
 
+
+func (r *PostgresRepositoryChunkRepository) ReplaceByFileID(
+	ctx context.Context,
+	fileID string,
+	chunks []*domain.RepositoryChunk,
+) error {
+	tx, err := r.db.Pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin replace repository chunks: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if _, err := tx.Exec(ctx, "DELETE FROM repository_chunks WHERE file_id = $1", fileID); err != nil {
+		return fmt.Errorf("delete repository chunks for file %q: %w", fileID, err)
+	}
+
+	for _, chunk := range chunks {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO repository_chunks (
+				id, file_id, chunk_index, start_line, end_line,
+				character_count, content, created_at
+			)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		`, chunk.ID, chunk.FileID, chunk.ChunkIndex, chunk.StartLine,
+			chunk.EndLine, chunk.CharacterCount, chunk.Content, chunk.CreatedAt); err != nil {
+			return fmt.Errorf(
+				"insert repository chunk for file %q at index %d: %w",
+				fileID, chunk.ChunkIndex, err,
+			)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit replace repository chunks: %w", err)
+	}
+	return nil
+}
+
 func (r *PostgresRepositoryChunkRepository) FindByID(
 	ctx context.Context,
 	id string,
