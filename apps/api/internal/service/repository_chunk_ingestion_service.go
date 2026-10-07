@@ -61,40 +61,17 @@ func (s *RepositoryChunkIngestionServiceImpl) ingestFile(
 	file *domain.RepositoryFile,
 ) error {
 	chunks := s.chunker.Chunk(file)
-	if len(chunks) == 0 {
-		return nil
+	for _, chunk := range chunks {
+		chunk.ID = uuid.NewString()
 	}
 
-	existing, err := s.chunkRepo.ListByFileID(ctx, file.ID)
-	if err != nil {
+	if err := s.chunkRepo.ReplaceByFileID(ctx, file.ID, chunks); err != nil {
 		return fmt.Errorf(
-			"list repository chunks for file %q: %w",
+			"replace repository chunks for file %q: %w",
 			file.Path,
 			err,
 		)
 	}
-
-	existingIndexes := make(map[int]struct{}, len(existing))
-	for _, chunk := range existing {
-		existingIndexes[chunk.ChunkIndex] = struct{}{}
-	}
-
-	for _, chunk := range chunks {
-		if _, exists := existingIndexes[chunk.ChunkIndex]; exists {
-			continue
-		}
-
-		chunk.ID = uuid.NewString()
-		if err := s.chunkRepo.Create(ctx, chunk); err != nil {
-			return fmt.Errorf(
-				"create repository chunk for file %q at index %d: %w",
-				file.Path,
-				chunk.ChunkIndex,
-				err,
-			)
-		}
-	}
-
 	return nil
 }
 
