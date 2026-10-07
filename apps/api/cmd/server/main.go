@@ -11,6 +11,7 @@ import (
 	"github.com/kristopher1027/devflow-ai/internal/config"
 	"github.com/kristopher1027/devflow-ai/internal/database"
 	devflowhttp "github.com/kristopher1027/devflow-ai/internal/http"
+	"github.com/kristopher1027/devflow-ai/internal/integration/anthropic"
 	githubintegration "github.com/kristopher1027/devflow-ai/internal/integration/github"
 	"github.com/kristopher1027/devflow-ai/internal/repository"
 	"github.com/kristopher1027/devflow-ai/internal/server"
@@ -197,6 +198,28 @@ func main() {
 		baseRepositorySyncService,
 		repositoryIngestionService,
 	)
+	var explainGenerator anthropic.TextGenerator
+	anthropicClient, anthropicErr := anthropic.NewClient(
+		os.Getenv("ANTHROPIC_API_KEY"),
+		os.Getenv("ANTHROPIC_MODEL"),
+	)
+	if anthropicErr != nil {
+		log.Printf("AI explanations disabled: %v", anthropicErr)
+		explainGenerator = anthropic.NewUnavailableGenerator(anthropicErr)
+	} else {
+		explainGenerator = anthropicClient
+	}
+	repositoryExplainService := service.NewRepositoryExplainService(
+		repositoryRepository,
+		projectRepository,
+		workspaceMemberRepository,
+		repositorySnapshotRepository,
+		repositoryFileRepository,
+		explainGenerator,
+	)
+	repositoryExplainHandler := devflowhttp.NewRepositoryExplainHandler(
+		repositoryExplainService,
+	)
 	repositorySyncWorker := service.NewRepositorySyncWorkerWithStore(
 		repositorySyncService,
 		32,
@@ -250,7 +273,14 @@ func main() {
 		authMiddleware,
 	)
 
-	app := server.New(":"+cfg.Port, router)
+	app := server.New(
+		":"+cfg.Port,
+		devflowhttp.WithRepositoryExplain(
+			router,
+			authMiddleware,
+			repositoryExplainHandler,
+		),
+	)
 
 	go func() {
 		log.Printf(
