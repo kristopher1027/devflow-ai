@@ -228,6 +228,23 @@ func main() {
 	repositoryExplainHandler := devflowhttp.NewRepositoryExplainHandler(
 		repositoryExplainService,
 	)
+
+	repositoryChunkSearchService := service.NewRepositoryChunkSearchService(
+		repositoryChunkRepository,
+	)
+	repositoryAskService := service.NewRepositoryAskService(
+		repositoryRepository,
+		projectRepository,
+		workspaceMemberRepository,
+		repositorySnapshotRepository,
+		repositoryChunkSearchService,
+		service.NewDefaultRepositoryRetrievalContextBuilder(),
+		service.NewRepositoryAIContextPackager(),
+		explainGenerator,
+	)
+	repositoryAskHandler := devflowhttp.NewRepositoryAskHandler(
+		repositoryAskService,
+	)
 	repositorySyncWorker := service.NewRepositorySyncWorkerWithStore(
 		repositorySyncService,
 		32,
@@ -283,10 +300,14 @@ func main() {
 
 	app := server.New(
 		":"+cfg.Port,
-		devflowhttp.WithRepositoryExplain(
-			router,
+		devflowhttp.WithRepositoryAsk(
+			devflowhttp.WithRepositoryExplain(
+				router,
+				authMiddleware,
+				repositoryExplainHandler,
+			),
 			authMiddleware,
-			repositoryExplainHandler,
+			repositoryAskHandler,
 		),
 	)
 
