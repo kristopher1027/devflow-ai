@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	ErrRepositoryRetrievalContextSnapshotIDRequired = errors.New("repository retrieval context snapshot id is required")
+	ErrRepositoryRetrievalContextSnapshotIDRequired   = errors.New("repository retrieval context snapshot id is required")
 	ErrRepositoryRetrievalContextMaxCharactersInvalid = errors.New("repository retrieval context max characters must be positive")
 )
 
@@ -112,23 +112,23 @@ func (b *RepositoryRetrievalContextBuilderImpl) Build(
 			ChunkID:        chunk.ID,
 			FileID:         chunk.FileID,
 			ChunkIndex:     chunk.ChunkIndex,
-			FilePath:      result.FilePath,
-			Language:      cloneLanguage(result.Language),
-			StartLine:     chunk.StartLine,
-			EndLine:       chunk.EndLine,
+			FilePath:       result.FilePath,
+			Language:       cloneLanguage(result.Language),
+			StartLine:      chunk.StartLine,
+			EndLine:        chunk.EndLine,
 			CharacterCount: characterCount,
-			Content:       chunk.Content,
-			Score:         result.Score,
-			MatchedTerms:  append([]string(nil), result.MatchedTerms...),
+			Content:        chunk.Content,
+			Score:          result.Score,
+			MatchedTerms:   append([]string(nil), result.MatchedTerms...),
 		}
 
 		context.Items = append(context.Items, item)
 		context.CharacterCount += characterCount
 		remaining -= characterCount
 		selectedRanges = append(selectedRanges, selectedRepositoryChunkRange{
-			fileKey:    fileKey,
-			startLine:  chunk.StartLine,
-			endLine:    chunk.EndLine,
+			fileKey:   fileKey,
+			startLine: chunk.StartLine,
+			endLine:   chunk.EndLine,
 		})
 	}
 
@@ -167,4 +167,3 @@ func cloneLanguage(language *string) *string {
 }
 
 var _ RepositoryRetrievalContextBuilder = (*RepositoryRetrievalContextBuilderImpl)(nil)
-

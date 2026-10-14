@@ -7,15 +7,15 @@ type RepositoryRetrievalContext struct {
 }
 
 type RepositoryRetrievalContextItem struct {
-	ChunkID       string
-	FileID        string
-	ChunkIndex    int
-	FilePath      string
-	Language      *string
-	StartLine     int
-	EndLine       int
+	ChunkID        string
+	FileID         string
+	ChunkIndex     int
+	FilePath       string
+	Language       *string
+	StartLine      int
+	EndLine        int
 	CharacterCount int
-	Content       string
-	Score         float64
-	MatchedTerms  []string
+	Content        string
+	Score          float64
+	MatchedTerms   []string
 }

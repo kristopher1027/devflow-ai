@@ -13,8 +13,8 @@ import (
 // that are already stored, so a retry after a half-finished ingest resumes
 // where it stopped, and a fully ingested snapshot is a cheap no-op.
 type RepositorySyncWithIngestionService struct {
-	sync      RepositorySyncService
-	ingestion RepositoryIngestionService
+	sync           RepositorySyncService
+	ingestion      RepositoryIngestionService
 	chunkIngestion RepositoryChunkIngestionService
 }
 
@@ -29,8 +29,8 @@ func NewRepositorySyncWithIngestionService(
 	}
 
 	return &RepositorySyncWithIngestionService{
-		sync:          sync,
-		ingestion:     ingestion,
+		sync:           sync,
+		ingestion:      ingestion,
 		chunkIngestion: chunker,
 	}
 }

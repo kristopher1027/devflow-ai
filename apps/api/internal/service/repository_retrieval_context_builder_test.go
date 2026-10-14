@@ -17,12 +17,12 @@ func TestRepositoryRetrievalContextBuilderBuild(t *testing.T) {
 	results := []*domain.RepositoryChunkSearchResult{
 		{
 			Chunk: &domain.RepositoryChunk{
-				ID:          "chunk-2",
-				FileID:      "file-2",
+				ID:         "chunk-2",
+				FileID:     "file-2",
 				ChunkIndex: 1,
-				StartLine:   20,
-				EndLine:     30,
-				Content:     "package service",
+				StartLine:  20,
+				EndLine:    30,
+				Content:    "package service",
 			},
 			FilePath:     "internal/service/search.go",
 			Language:     &language,
@@ -31,12 +31,12 @@ func TestRepositoryRetrievalContextBuilderBuild(t *testing.T) {
 		},
 		{
 			Chunk: &domain.RepositoryChunk{
-				ID:        "chunk-1",
-				FileID:    "file-1",
+				ID:         "chunk-1",
+				FileID:     "file-1",
 				ChunkIndex: 0,
 				StartLine:  1,
-				EndLine:   10,
-				Content:   "package domain",
+				EndLine:    10,
+				Content:    "package domain",
 			},
 			FilePath: "internal/domain/chunk.go",
 			Score:    5,

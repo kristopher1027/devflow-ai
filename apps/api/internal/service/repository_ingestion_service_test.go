@@ -256,7 +256,6 @@ func TestDecodeTextBlobRejectsBadInput(t *testing.T) {
 	require.True(t, strings.HasPrefix(text, "h"))
 }
 
-
 func TestRepositoryIngestionRejectsTruncatedTree(t *testing.T) {
 	client := &ingestGitHubClient{
 		tree: &github.RepositoryTree{
@@ -277,9 +276,9 @@ func TestRepositoryIngestionRejectsTruncatedTree(t *testing.T) {
 
 	snapshots := &fakeRepositorySnapshotRepository{
 		snapshot: &domain.RepositorySnapshot{
-			ID:          "snap-1",
+			ID:           "snap-1",
 			RepositoryID: "repo-1",
-			CommitSHA:   "commit-abc",
+			CommitSHA:    "commit-abc",
 		},
 	}
 
