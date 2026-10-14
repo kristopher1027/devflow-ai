@@ -127,6 +127,37 @@ expect 202
 SYNC_JOB="$(field "d['ID']")"
 wait_for_job "/repositories/sync-jobs/$SYNC_JOB"
 
+step "ask a question about the code (keyword retrieval + AI)"
+call POST "/repositories/$REPO_ID/ask" \
+  '{"question":"How are interrupted import jobs recovered after a server restart?"}'
+case "$STATUS" in
+  200)
+    echo "answer:"
+    field "d['answer']"
+    echo "sources:"
+    python3 -c 'import sys,json; d=json.load(sys.stdin); print("\n".join("  %s:%s-%s" % (s["file_path"], s["start_line"], s["end_line"]) for s in d["sources"]))' <<<"$BODY"
+    ;;
+  503)
+    echo "retrieval worked (auth, snapshot, search all passed), then it stopped at the AI step:"
+    echo "no API key is configured on the server. Expected until you add one."
+    ;;
+  *)
+    echo "FAILED: unexpected result HTTP $STATUS"
+    echo "$BODY"
+    exit 1
+    ;;
+esac
+
+step "ask something that matches nothing (expects 404)"
+call POST "/repositories/$REPO_ID/ask" '{"question":"zzqxjk plorbnik"}'
+expect 404
+echo "404 as expected"
+
+step "ask with an empty question (expects 400)"
+call POST "/repositories/$REPO_ID/ask" '{"question":"   "}'
+expect 400
+echo "400 as expected"
+
 step "explain repository (needs ANTHROPIC_API_KEY on the server)"
 call POST "/repositories/$REPO_ID/explain"
 case "$STATUS" in
