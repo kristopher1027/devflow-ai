@@ -71,6 +71,18 @@ wait_for_job() { # wait_for_job PATH
   exit 1
 }
 
+step "clean up data from earlier test runs (local database only)"
+# Each GitHub App installation can be connected to only one workspace, so a
+# second run would fail with HTTP 500 unless the previous test workspace is gone.
+if command -v docker >/dev/null 2>&1 && docker compose ps postgres >/dev/null 2>&1; then
+  docker compose exec -T postgres psql -U devflow -d devflow -q \
+    -c "delete from workspaces where name = 'live-test';" >/dev/null 2>&1 \
+    && echo "removed earlier live-test workspaces" \
+    || echo "could not clean up (continuing)"
+else
+  echo "skipped (run this script from the repo folder with the local database up)"
+fi
+
 step "health"
 call GET /health
 expect 200
@@ -149,7 +161,10 @@ case "$STATUS" in
 esac
 
 step "ask something that matches nothing (expects 404)"
-call POST "/repositories/$REPO_ID/ask" '{"question":"zzqxjk plorbnik"}'
+# The words are made up on every run, so they can never appear in the
+# repository itself (this script is part of the repository and gets indexed).
+NONSENSE="qq$(date +%s)zx nope${RANDOM}${RANDOM}"
+call POST "/repositories/$REPO_ID/ask" "{\"question\":\"$NONSENSE\"}"
 expect 404
 echo "404 as expected"
 
