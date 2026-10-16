@@ -78,6 +78,10 @@ func main() {
 		loginService,
 		cfg.CookieSecure,
 	)
+	logoutHandler := devflowhttp.NewLogoutHandler(
+		authService,
+		cfg.CookieSecure,
+	)
 
 	// Workspace
 	workspaceService := service.NewWorkspaceServiceWithMembers(
@@ -300,14 +304,17 @@ func main() {
 
 	app := server.New(
 		":"+cfg.Port,
-		devflowhttp.WithRepositoryAsk(
-			devflowhttp.WithRepositoryExplain(
-				router,
+		devflowhttp.WithLogout(
+			devflowhttp.WithRepositoryAsk(
+				devflowhttp.WithRepositoryExplain(
+					router,
+					authMiddleware,
+					repositoryExplainHandler,
+				),
 				authMiddleware,
-				repositoryExplainHandler,
+				repositoryAskHandler,
 			),
-			authMiddleware,
-			repositoryAskHandler,
+			logoutHandler,
 		),
 	)
 
