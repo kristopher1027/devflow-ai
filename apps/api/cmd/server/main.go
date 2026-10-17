@@ -11,7 +11,7 @@ import (
 	"github.com/kristopher1027/devflow-ai/internal/config"
 	"github.com/kristopher1027/devflow-ai/internal/database"
 	devflowhttp "github.com/kristopher1027/devflow-ai/internal/http"
-	"github.com/kristopher1027/devflow-ai/internal/integration/anthropic"
+	"github.com/kristopher1027/devflow-ai/internal/integration/aiprovider"
 	githubintegration "github.com/kristopher1027/devflow-ai/internal/integration/github"
 	"github.com/kristopher1027/devflow-ai/internal/repository"
 	"github.com/kristopher1027/devflow-ai/internal/server"
@@ -210,17 +210,8 @@ func main() {
 		repositoryIngestionService,
 		repositoryChunkIngestionService,
 	)
-	var explainGenerator anthropic.TextGenerator
-	anthropicClient, anthropicErr := anthropic.NewClient(
-		os.Getenv("ANTHROPIC_API_KEY"),
-		os.Getenv("ANTHROPIC_MODEL"),
-	)
-	if anthropicErr != nil {
-		log.Printf("AI explanations disabled: %v", anthropicErr)
-		explainGenerator = anthropic.NewUnavailableGenerator(anthropicErr)
-	} else {
-		explainGenerator = anthropicClient
-	}
+	explainGenerator, aiProvider := aiprovider.NewTextGenerator(os.Getenv)
+	log.Printf("AI provider: %s", aiProvider)
 	repositoryExplainService := service.NewRepositoryExplainService(
 		repositoryRepository,
 		projectRepository,
