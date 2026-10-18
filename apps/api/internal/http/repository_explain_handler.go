@@ -3,6 +3,7 @@ package http
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 
@@ -90,6 +91,8 @@ func writeExplainError(w http.ResponseWriter, err error) {
 
 	case errors.Is(err, anthropic.ErrUnexpectedStatus),
 		errors.Is(err, anthropic.ErrEmptyResponse):
+		// The error text holds only a status code, never keys or bodies.
+		log.Printf("AI provider error: %v", err)
 		http.Error(w, "AI provider error", http.StatusBadGateway)
 
 	default:

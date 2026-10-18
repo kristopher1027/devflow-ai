@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -27,6 +28,29 @@ const (
 	defaultMaxOutputTokens = 4096
 	maxResponseBytes       = 2 << 20
 )
+
+// googleErrorCodePattern only accepts enum-style codes such as NOT_FOUND or
+// RESOURCE_EXHAUSTED, so nothing else from the error body is ever logged.
+var googleErrorCodePattern = regexp.MustCompile(`^[A-Z][A-Z_]{2,40}$`)
+
+// googleErrorCode extracts the short status code from Google's error JSON,
+// for example {"error":{"status":"NOT_FOUND", ...}}. It returns "" if the
+// body has no code in the expected shape.
+func googleErrorCode(body []byte) string {
+	var parsed struct {
+		Error struct {
+			Status string `json:"status"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return ""
+	}
+	if !googleErrorCodePattern.MatchString(parsed.Error.Status) {
+		return ""
+	}
+
+	return parsed.Error.Status
+}
 
 type Client struct {
 	apiKey     string
@@ -110,6 +134,15 @@ func (c *Client) Generate(
 	// Report only the status: never the body or headers, so the API key
 	// cannot end up in logs or error messages.
 	if response.StatusCode != http.StatusOK {
+		if code := googleErrorCode(data); code != "" {
+			return "", fmt.Errorf(
+				"%w: %d %s",
+				anthropic.ErrUnexpectedStatus,
+				response.StatusCode,
+				code,
+			)
+		}
+
 		return "", fmt.Errorf(
 			"%w: %d",
 			anthropic.ErrUnexpectedStatus,

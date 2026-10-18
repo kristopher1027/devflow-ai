@@ -110,6 +110,35 @@ func TestGenerateReportsStatusWithoutLeakingKey(t *testing.T) {
 	}
 }
 
+func TestGenerateIncludesGoogleStatusCodeButNotTheMessage(t *testing.T) {
+	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"error":{"code":429,"status":"RESOURCE_EXHAUSTED","message":"quota exceeded for key test-key"}}`))
+	})
+
+	_, err := client.Generate(context.Background(), "s", "p")
+
+	require.ErrorIs(t, err, anthropic.ErrUnexpectedStatus)
+	require.Contains(t, err.Error(), "429 RESOURCE_EXHAUSTED")
+	require.NotContains(t, err.Error(), "test-key")
+	require.NotContains(t, err.Error(), "quota exceeded")
+}
+
+func TestGoogleErrorCodeIgnoresUnexpectedShapes(t *testing.T) {
+	for _, body := range []string{
+		``,
+		`not json`,
+		`{}`,
+		`{"error":{"status":"lowercase"}}`,
+		`{"error":{"status":"HAS SPACE AND test-key"}}`,
+		`{"error":{"status":"WAY_TOO_LONG_` + string(make([]byte, 0)) + `ABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWXYZ"}}`,
+	} {
+		require.Empty(t, googleErrorCode([]byte(body)), body)
+	}
+
+	require.Equal(t, "NOT_FOUND", googleErrorCode([]byte(`{"error":{"status":"NOT_FOUND"}}`)))
+}
+
 func TestGenerateRejectsEmptyOrBlockedAnswers(t *testing.T) {
 	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"candidates":[]}`))
