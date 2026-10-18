@@ -1,607 +1,148 @@
-![CI](https://github.com/kristopher1027/devflow-ai/actions/workflows/ci.yml/badge.svg)
-
-![CI](https://github.com/kristopher1027/devflow-ai/actions/workflows/ci.yml/badge.svg)
-
 # DevFlow AI
 
-**AI-powered engineering workspace for modern software development.**
+![CI](https://github.com/kristopher1027/devflow-ai/actions/workflows/ci.yml/badge.svg)
 
-DevFlow AI is a full-stack developer productivity platform designed to bring projects, tasks, GitHub activity, code intelligence, documentation, CI/CD insights, and AI-assisted engineering into one workspace.
+**Connect a GitHub repository and ask questions about its code.** DevFlow imports your repositories through a GitHub App, stores a snapshot of their files, finds the code relevant to a question, and has an AI model answer with links to the exact lines it used.
 
-The goal is to help developers understand and manage the complete software development lifecycle from a single platform.
+> Status: early stage, in active development. The backend, web app and AI answers work end to end locally. Deployment is the next milestone.
 
----
+## What it does
 
-## 🚀 Vision
+1. **Create a workspace and a project**, then connect your GitHub account by installing a GitHub App with read-only access to repository contents.
+2. **Import** the repositories the app can see.
+3. **Sync** a repository: DevFlow records a snapshot of the default branch at its latest commit, downloads its source and documentation files, and splits them into searchable chunks.
+4. **Ask** a question in plain English. DevFlow searches the chunks, builds a bounded context from the best matches, and asks the AI model to answer using only that code. The answer comes with clickable sources pinned to the synced commit.
+5. **Explain** a repository in one click: what it does, its tech stack, structure and how to run it.
 
-Modern development workflows are spread across many tools:
+## Architecture
 
-- GitHub for repositories, issues, and pull requests
-- Project-management tools for tasks
-- CI/CD platforms for build and deployment information
-- Documentation platforms for technical knowledge
-- AI tools for coding assistance
-- Chat applications for team communication
+```mermaid
+flowchart LR
+    Browser["React + TypeScript app"] -->|"/api (same origin)"| API["Go API"]
+    API --> DB[("PostgreSQL")]
+    API -->|"GitHub App JWT"| GitHub["GitHub API"]
+    API -->|"question + retrieved code"| AI["Gemini or Claude"]
+```
 
-**DevFlow AI aims to connect these pieces into one engineering workspace.**
-
-The long-term vision is for DevFlow to understand a project's:
-
-> **Code + Repository + Tasks + Issues + Pull Requests + CI/CD + Documentation + Development History**
-
-and provide useful context-aware engineering assistance.
-
----
-
-## ✨ Planned Features
-
-### Workspace Management
-
-- Create and manage engineering workspaces
-- Workspace ownership and membership
-- Member roles and permissions
-- Secure workspace-level access control
-
-### Project & Task Management
-
-- Create and organize projects
-- Track engineering tasks
-- Task status and priorities
-- Project activity and history
-
-### GitHub Integration
-
-- Connect GitHub repositories
-- Import repositories and project information
-- View issues and pull requests
-- Track repository activity
-- Connect development activity with project tasks
-
-### Code Intelligence
-
-- Understand repository structure
-- Index source code and documentation
-- Search code using natural language
-- Retrieve relevant code context
-- Build project-aware AI context using RAG
-
-### AI Engineering Assistant
-
-DevFlow's AI assistant is intended to help developers:
-
-- Understand unfamiliar code
-- Explain errors
-- Investigate bugs
-- Suggest implementation approaches
-- Analyze technical documentation
-- Understand pull requests
-- Generate development insights
-- Answer questions about a connected codebase
-
-### CI/CD Intelligence
-
-- Monitor build failures
-- Analyze CI/CD errors
-- Connect failures to relevant code
-- Provide debugging context
-- Track deployment-related information
-
-### Observability
-
-Planned production capabilities include:
-
-- Structured logging
-- Metrics
-- Distributed tracing
-- Error tracking
-- Health checks
-- Service monitoring
-
----
-
-## 🏗️ Architecture
-
-DevFlow is being developed using a modular full-stack architecture.
+The API is layered: HTTP handlers call services, services hold the rules, and repositories talk to PostgreSQL. Each layer depends on interfaces, so every piece is tested on its own with fakes.
 
 ```text
-┌─────────────────────────────────────────────┐
-│                 Frontend                    │
-│          Modern Web Application             │
-└──────────────────────┬──────────────────────┘
-                       │
-                       │ HTTP / REST
-                       ▼
-┌─────────────────────────────────────────────┐
-│                 Go API                      │
-│                                             │
-│  HTTP → Service → Repository → Database     │
-└──────────────────────┬──────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────┐
-│               PostgreSQL                    │
-│                                             │
-│ Users • Workspaces • Projects • Tasks       │
-└─────────────────────────────────────────────┘
-
-              External Integrations
-                       │
-          ┌────────────┼────────────┐
-          ▼            ▼            ▼
-       GitHub         AI          CI/CD
+apps/
+  api/                     Go API
+    cmd/server/            wiring and start-up
+    internal/
+      auth/ config/ database/ domain/
+      http/                handlers, middleware, routing
+      service/             business rules, workers, retrieval, AI orchestration
+      repository/          PostgreSQL access
+      integration/         github, anthropic, gemini, aiprovider
+  web/                     React + TypeScript + Vite front end
+docs/                      archived plan and change log
+docker-compose.yml         local PostgreSQL
 ```
 
-The backend follows a layered architecture:
+### How a question gets answered
 
-```text
-HTTP Handlers
-      ↓
-Services
-      ↓
-Repositories
-      ↓
-PostgreSQL
-```
+`Import` finds repositories, then `Sync` creates a snapshot and a background worker ingests the files and chunks them. At question time the keywords are extracted, the chunks matching the most keywords rank first, the retrieval builder fits them into a size budget, and the packager turns them into a prompt that labels the code as untrusted data. The model's answer is returned with the source files and line ranges.
 
-This separation keeps business logic independent from HTTP and database implementations, making the system easier to test, maintain, and scale.
+## Engineering highlights
 
----
+- **Durable background jobs.** Imports and syncs run on a worker queue with retries and status polling. Jobs interrupted by a restart are marked failed on start-up instead of hanging forever.
+- **Security by default.** Session cookies are HttpOnly and only a hash of the session token is stored. Workspace roles are checked in the service layer. Secrets come from the environment and are never logged. Provider errors report only a status code.
+- **Prompt-injection awareness.** Repository files are treated as untrusted input: the model is told never to follow instructions found inside them, and file content cannot close the prompt's wrapper tags.
+- **Provider-agnostic AI.** Answers go through a small interface with Gemini (free tier) and Claude implementations, chosen by environment variable.
+- **Tested.** Over 400 tests cover the API, including PostgreSQL integration tests, plus unit tests for the web client. CI builds the API, applies the migrations and runs the Go tests on every push.
 
-## 🛠️ Technology Stack
+## Run it locally
 
-### Backend
+You need Docker, Go (see `apps/api/go.mod`), Node 22 and the [`migrate`](https://github.com/golang-migrate/migrate) CLI.
 
-- **Go**
-- REST API
-- PostgreSQL
-- SQL migrations
-- Layered architecture
-- Unit and integration testing
-
-### Database
-
-- **PostgreSQL 17**
-- UUID-based identifiers
-- Database migrations
-- Foreign-key relationships
-- Transaction-safe operations
-
-### Frontend
-
-The frontend will use a modern TypeScript-based web stack and communicate with the Go API through REST APIs.
-
-### AI
-
-The AI layer is planned to incorporate:
-
-- LLM-based assistance
-- Retrieval-Augmented Generation (RAG)
-- Code and documentation indexing
-- Repository-aware context
-- Embeddings/vector search
-
-### Infrastructure
-
-Planned infrastructure includes:
-
-- Docker
-- Docker Compose
-- CI/CD
-- Structured logging
-- Metrics
-- Distributed tracing
-- Production deployment
-
----
-
-## 📁 Project Structure
-
-The project is organized as a monorepo:
-
-```text
-devflow-ai/
-├── apps/
-│   └── api/
-│       ├── cmd/
-│       │   └── server/
-│       ├── internal/
-│       │   ├── config/
-│       │   ├── database/
-│       │   ├── domain/
-│       │   ├── http/
-│       │   ├── repository/
-│       │   ├── server/
-│       │   └── service/
-│       ├── migrations/
-│       ├── go.mod
-│       └── go.sum
-│
-├── docker-compose.yml
-├── README.md
-└── ...
-```
-
-The exact structure will evolve as additional services and frontend applications are introduced.
-
----
-
-## 🔐 Security
-
-Security is a first-class requirement of DevFlow.
-
-The application is being designed around principles including:
-
-- Authentication and authorization
-- Workspace-level access control
-- Role-based permissions
-- Input validation
-- Secure password handling
-- SQL injection prevention
-- Secure session/token management
-- Least-privilege access
-- Secret management
-- Secure GitHub integration
-- Protection of sensitive repository data
-
-Security considerations will be incorporated throughout development rather than added after the application is completed.
-
----
-
-## 🧪 Testing
-
-DevFlow follows a test-first approach where practical.
-
-Current backend testing includes:
-
-- Unit tests
-- Service-layer tests
-- Repository tests
-- HTTP handler tests
-- Database-backed integration tests
-
-Run the Go test suite with:
-
-```bash
-cd apps/api
-DATABASE_URL=postgres://devflow:devflowpassword@localhost:5432/devflow?sslmode=disable go test ./...
-```
-
----
-
-## 🐳 Running Locally
-
-### Prerequisites
-
-Make sure you have:
-
-- Go
-- Docker
-- Docker Compose
-- PostgreSQL-compatible environment
-- Git
-
-### Clone the repository
-
-```bash
-git clone https://github.com/kristopher1027/devflow-ai.git
-cd devflow-ai
-```
-
-### Start PostgreSQL
+**1. Database**
 
 ```bash
 docker compose up -d
+migrate -path apps/api/internal/database/migrations \
+  -database 'postgres://devflow:devflowpassword@localhost:5432/devflow?sslmode=disable' up
 ```
 
-### Configure environment variables
+**2. A GitHub App** (one time)
 
-Create the appropriate environment configuration for the API.
+Create a GitHub App at https://github.com/settings/apps/new with **Contents: Read-only**, no webhook, installable on your account only. Generate a private key, install the app on a repository, and note the App ID and the installation ID (the number in `github.com/settings/installations/<number>`).
 
-Example:
+**3. Configure and start the API**
 
-```env
-DATABASE_URL=postgres://devflow:devflowpassword@localhost:5432/devflow?sslmode=disable
-PORT=8080
-```
-
-> Do not commit real credentials, API keys, tokens, or secrets to Git.
-
-### Run migrations
-
-Using the project's migration tooling:
-
-```bash
-migrate -path migrations \
-  -database "$DATABASE_URL" \
-  up
-```
-
-### Start the API
+| Variable | Purpose |
+| --- | --- |
+| `DATABASE_URL` | PostgreSQL connection string |
+| `GITHUB_APP_ID` | your GitHub App's ID |
+| `GITHUB_APP_PRIVATE_KEY` | the App's private key (the PEM text) |
+| `GEMINI_API_KEY` or `ANTHROPIC_API_KEY` | enables AI answers (optional) |
+| `AI_PROVIDER` | `gemini` or `anthropic`, to force one (optional) |
+| `GEMINI_MODEL` / `ANTHROPIC_MODEL` | override the default model (optional) |
+| `PORT`, `DEVFLOW_COOKIE_SECURE` | listen port (default 8080) and the cookie Secure flag |
 
 ```bash
 cd apps/api
+export DATABASE_URL='postgres://devflow:devflowpassword@localhost:5432/devflow?sslmode=disable'
 go run ./cmd/server
 ```
 
-The API should be available at:
+Without an AI key the server still starts, and the Ask and Explain buttons say AI is not configured.
 
-```text
-http://localhost:8080
+**4. Start the web app**
+
+```bash
+cd apps/web
+npm install
+npm run dev
 ```
 
----
+Open http://localhost:5173, create an account, create a workspace, connect GitHub with your installation ID, then create a project and press **Import from GitHub**. The browser only talks to `/api/...` on its own address, and Vite forwards that to the Go API, so there is no CORS setup.
 
-## 🩺 Health Check
+**5. Optional: check the whole flow from the command line**
 
-The API provides a health endpoint for verifying that the service is running.
-
-Example response:
-
-```json
-{
-  "service": "devflow-api",
-  "status": "ok"
-}
+```bash
+INSTALLATION_ID=<number> ACCOUNT_LOGIN=<github-username> bash devflow-live-test.sh
 ```
 
----
+## API overview
 
-## 🗄️ Current Backend Progress
+All routes except register and login need the session cookie.
 
-DevFlow is being developed incrementally rather than generating the entire application at once.
+| Method and path | Purpose |
+| --- | --- |
+| `POST /auth/register`, `/auth/login`, `/auth/logout` | accounts and sessions |
+| `GET`, `POST /workspaces` | list and create workspaces |
+| `GET`, `POST /workspaces/{id}/projects` | projects in a workspace |
+| `GET`, `POST`, `PATCH /workspaces/{id}/github` | the workspace's GitHub connection |
+| `POST /projects/{id}/repositories/import` | import repositories (background job) |
+| `GET /projects/{id}/repositories` | list repositories |
+| `POST /repositories/{id}/sync` | sync a repository (background job) |
+| `GET /github/repository-import-jobs/{id}`, `/repositories/sync-jobs/{id}` | job status |
+| `POST /repositories/{id}/ask` | answer a question, with sources |
+| `POST /repositories/{id}/explain` | explain the repository |
 
-Current foundation includes:
+## Tests
 
-- Go API
-- PostgreSQL integration
-- Database configuration
-- Database migrations
-- User domain model
-- User repository
-- Workspace domain model
-- Workspace persistence
-- Workspace ownership
-- Workspace membership/roles
-- Service layer
-- HTTP handlers
-- Automated tests
-- Docker-based PostgreSQL development environment
-
-The next capabilities will build on this foundation.
-
-### Working Change Log
-
-This section is the handoff record for ongoing development. Each future change should update this README with:
-
-- What was added or changed
-- The relevant API, domain, database, or infrastructure files
-- Tests added or updated
-- Validation performed
-- Remaining work or the next recommended step
-
-#### Baseline: 2026-09-17
-
-Already present in the repository:
-
-- Authentication helpers for passwords, sessions, tokens, and token hashing
-- User registration and login/logout flows
-- Authentication middleware
-- Users, workspaces, workspace members, projects, repositories, and sessions in the domain layer
-- Repository and service layers for users, workspaces, workspace members, projects, repositories, and sessions
-- HTTP handlers and routes for health checks, authentication, workspaces, workspace members, and projects
-- PostgreSQL configuration and database access
-- SQL migrations for the current database schema
-- Unit, service, repository, and HTTP tests across the backend
-- Docker Compose development database setup
-
-#### Current Focus
-
-- Continue backend development from the existing foundation
-- Keep authentication and workspace authorization correct as new features are added
-- Add each implementation step to this log before moving to the next major capability
-
-#### Change Entries
-
-| Date | Change | Files or area | Tests and validation | Status |
-|------|--------|---------------|----------------------|--------|
-| 2026-09-17 | Added this working change log and continuation record | `README.md` | README reviewed; repository baseline checked | Complete |
-| 2026-09-17 | Added comprehensive unit tests for Repository Service `Create`, including a recording repository fake | `apps/api/internal/service/repository_service_test.go` | `go test ./internal/service -run '^TestRepositoryServiceCreate'`; `DATABASE_URL=postgres://devflow:devflowpassword@localhost:5432/devflow?sslmode=disable go test ./...` | Complete |
-| 2026-09-17 | Implemented and tested Repository Service `FindByID` with project-membership authorization and error propagation | `apps/api/internal/service/repository_service.go`, `apps/api/internal/service/repository_service_test.go` | `go test ./internal/service -run '^TestRepositoryServiceFindByID'`; `go test ./internal/service`; full `go test ./...` with Compose database URL | Complete |
-| 2026-09-17 | Implemented and tested Repository Service `ListByProjectID` with project-membership authorization and repository delegation | `apps/api/internal/service/repository_service.go`, `apps/api/internal/service/repository_service_test.go` | `go test ./internal/service -run '^TestRepositoryServiceListByProjectID'`; `go test ./internal/service`; full `go test ./...` with Compose database URL | Complete |
-| 2026-09-17 | Implemented and tested Repository Service `Delete` with project-membership authorization and error propagation | `apps/api/internal/service/repository_service.go`, `apps/api/internal/service/repository_service_test.go` | `go test ./internal/service -run '^TestRepositoryServiceDelete'`; `go test ./internal/service`; full `go test ./...` with Compose database URL | Complete |
-| 2026-09-17 | Added repository HTTP handlers and focused status/authentication tests for create, list, get, and delete | `apps/api/internal/http/repository_handler.go`, `apps/api/internal/http/repository_handler_test.go` | `go test ./internal/http -run '^TestRepositoryHandler'`; `go test ./internal/http`; full `go test ./...` with Compose database URL | Complete |
-| 2026-09-17 | Wired repository handlers into `router.go` and `main.go`, then added protected route coverage | `apps/api/internal/http/router.go`, `apps/api/internal/http/router_test.go`, `apps/api/cmd/server/main.go` | `go test ./internal/http -run '^TestRouter'`; `go test ./internal/http`; full `go test ./...` with Compose database URL | Complete |
-| 2026-09-17 | Verified the running API and documented the required database environment for the full test command | `README.md` | `DATABASE_URL=postgres://devflow:devflowpassword@localhost:5432/devflow?sslmode=disable go test ./...`; `curl http://localhost:8080/health` returned `{"service":"devflow-api","status":"ok"}` | Complete |
-| 2026-09-17 | Added the GitHub connection domain contract, migration 8, status validation, and PostgreSQL uniqueness tests | `apps/api/internal/domain/github_connection.go`, `apps/api/internal/domain/github_connection_test.go`, `apps/api/internal/database/migrations/000008_create_github_connections.up.sql`, `apps/api/internal/database/migrations/000008_create_github_connections.down.sql`, `apps/api/internal/database/migrations/000008_create_github_connections_test.go` | `go test ./internal/domain`; focused migration constraint test; full `DATABASE_URL=postgres://devflow:devflowpassword@localhost:5432/devflow?sslmode=disable go test ./...` | Complete |
-| 2026-09-17 | Added the GitHub connection repository interface, PostgreSQL implementation, and create/lookup/status-update integration tests | `apps/api/internal/repository/github_connection_repository.go`, `apps/api/internal/repository/github_connection_repository_test.go` | `DATABASE_URL=postgres://devflow:devflowpassword@localhost:5432/devflow?sslmode=disable go test ./internal/repository -run '^TestGitHubConnectionRepository'`; full `go test ./...` | Complete |
-| 2026-09-17 | Added the GitHub connection service with member read access, owner/admin management authorization, duplicate protection, and status-transition tests | `apps/api/internal/service/github_connection_service.go`, `apps/api/internal/service/github_connection_service_test.go` | `go test ./internal/service -run '^TestGitHubConnectionService'`; `go test ./internal/service`; full `go test ./...` with Compose database URL | Complete |
-| 2026-09-17 | Added authenticated GitHub connection HTTP handlers and tests for create, lookup, status updates, authorization, validation, and transitions | `apps/api/internal/http/github_connection_handler.go`, `apps/api/internal/http/github_connection_handler_test.go` | `go test ./internal/http -run '^TestGitHubConnectionHandler'`; `go test ./internal/http`; full `go test ./...` with Compose database URL | Complete |
-| 2026-09-17 | Wired GitHub connection dependencies into `main.go` and protected workspace routes into `router.go`, with route-level tests | `apps/api/cmd/server/main.go`, `apps/api/internal/http/router.go`, `apps/api/internal/http/router_test.go` | `go test ./internal/http -run '^TestRouter'`; `go test ./internal/http`; full `go test ./...` with Compose database URL | Complete |
-| 2026-09-17 | Added typed GitHub App configuration validation and a mockable integration client interface without network calls | `apps/api/internal/config/config.go`, `apps/api/internal/config/config_test.go`, `apps/api/internal/integration/github/client.go`, `apps/api/internal/integration/github/client_test.go` | `go test ./internal/config ./internal/integration/github`; full `go test ./...` with Compose database URL | Complete |
-| 2026-09-17 | Implemented the GitHub App client with injectable HTTP transport, JWT authentication, installation-token exchange, repository decoding, and API error handling | `apps/api/internal/integration/github/client.go`, `apps/api/internal/integration/github/client_test.go` | `go test ./internal/integration/github`; full `go test ./...` with Compose database URL | Complete |
-| 2026-09-17 | Added the GitHub repository import service with connection lookup, GitHub client delegation, repository metadata mapping, duplicate skipping, and error propagation tests | `apps/api/internal/service/github_repository_import_service.go`, `apps/api/internal/service/github_repository_import_service_test.go` | `go test ./internal/service -run '^TestGitHubRepositoryImportService'`; `go test ./internal/service`; full `go test ./...` with Compose database URL | Complete |
-| 2026-09-17 | Exposed repository import through an authenticated endpoint and added a controlled unavailable-client fallback when GitHub App credentials are missing | `apps/api/internal/http/github_repository_import_handler.go`, `apps/api/internal/http/github_repository_import_handler_test.go`, `apps/api/internal/http/router.go`, `apps/api/internal/http/router_test.go`, `apps/api/cmd/server/main.go`, `apps/api/internal/integration/github/client.go` | `go test ./internal/http -run '^(TestGitHubRepositoryImportHandler|TestRouter)'`; `go test ./internal/http`; full `go test ./...` with Compose database URL | Complete |
-| 2026-09-17 | Added an in-process background import queue with bounded retries, cancellation handling, asynchronous `202` responses, and worker lifecycle wiring | `apps/api/internal/service/github_repository_import_job.go`, `apps/api/internal/service/github_repository_import_job_test.go`, `apps/api/internal/http/github_repository_import_handler.go`, `apps/api/cmd/server/main.go` | `go test ./internal/service`; `go test ./internal/http`; full `go test ./...` with Compose database URL | Complete |
-| 2026-09-17 | Added durable import-job status persistence, migration 9, structured failure code/message fields, retry/success/failure metrics, and lifecycle integration tests | `apps/api/internal/domain/github_repository_import_job.go`, `apps/api/internal/database/migrations/000009_create_github_repository_import_jobs.*`, `apps/api/internal/repository/github_repository_import_job_repository.go`, `apps/api/internal/repository/github_repository_import_job_repository_test.go`, `apps/api/internal/service/github_repository_import_job.go` | Migration 9 applied; focused durable repository tests; full `go test ./...` with Compose database URL | Complete |
-
-When development resumes, append a new row rather than replacing previous entries. This README is the source of truth for continuing work across sessions.
-
-Next small step: expose a protected job-status lookup endpoint and add durable queue recovery for jobs left in `running` after process shutdown.
-
-### Next Large Steps
-
-The larger implementation sequence is:
-
-1. Complete repository management
-     - `ListByProjectID` and `Delete` service tests and implementations
-     - HTTP handlers, routes, request validation, and authorization tests
-     - Consistent API error responses
-
-2. Stabilize the backend platform
-     - Authentication and authorization review across every endpoint
-     - Request-scoped context and structured error handling
-     - Configuration, logging, health checks, and database migration discipline
-     - CI test execution and integration-test database setup
-
-3. Build GitHub integration
-     - Secure GitHub connection and token storage model
-     - Repository import and synchronization service
-     - Issues and pull requests domain models and persistence
-     - Rate-limit handling, retries, webhook validation, and sync observability
-
-4. Add the frontend workspace
-     - Authentication and workspace navigation
-     - Projects, repositories, members, and activity views
-     - Typed API client and consistent loading/error states
-
-5. Add code intelligence
-     - Repository ingestion and file metadata
-     - Code and documentation indexing
-     - Search and retrieval contracts
-     - Background jobs and incremental re-indexing
-
-6. Add the AI engineering assistant
-     - Context assembly from repository, project, and documentation data
-     - Provider abstraction and request safety limits
-     - Conversation persistence, citations, and auditability
-
-7. Harden for production
-     - CI/CD deployment pipeline
-     - Metrics, tracing, alerting, backups, and secret management
-     - Security review, performance testing, and operational documentation
-
-### GitHub Integration Design
-
-The first GitHub integration will keep connection metadata separate from imported repository metadata.
-
-#### Initial Decisions
-
-- A GitHub connection belongs to a workspace, not to an individual repository.
-- The preferred integration model is a GitHub App installation because it supports least-privilege repository access, installation scoping, and webhook delivery.
-- Store the GitHub installation ID, account login, selected permissions, connection status, and timestamps in a dedicated connection model.
-- Do not store long-lived GitHub access tokens in the `repositories` table or in logs. Generate short-lived installation tokens on the server using application credentials managed outside the database.
-- Keep GitHub API behavior behind an integration client interface so services remain testable without network calls.
-- Import metadata through the existing Repository Service so authorization and duplicate protection remain in one place.
-- Run repository synchronization asynchronously after connection or import; HTTP requests should not wait for a complete repository sync.
-
-#### Planned Flow
-
-```text
-Workspace user
-     ↓
-GitHub App installation / connection validation
-     ↓
-Persist workspace GitHub connection metadata
-     ↓
-List accessible GitHub repositories
-     ↓
-Repository Service Create
-     ↓
-Background synchronization and webhook updates
+```bash
+cd apps/api && go test ./...      # repository tests need DATABASE_URL and a migrated database
+cd apps/web && npm test           # API client, routing and error-message tests
 ```
 
-Next GitHub step: expose synchronization job status and add recovery for interrupted jobs.
+## Roadmap
 
----
+- Deploy a public demo (API, database and web app).
+- Semantic search with embeddings (pgvector) in addition to keyword matching.
+- Replace or remove a workspace's GitHub connection from the UI.
+- Webhooks to re-sync automatically on push.
+- Pull request and issue context, and richer repository analysis.
 
-## 🗺️ Development Roadmap
+The original, much larger plan is kept in [docs/ROADMAP_AND_LOG.md](docs/ROADMAP_AND_LOG.md).
 
-DevFlow is being developed through the following stages:
+## License
 
-```text
-Requirements
-     ↓
-Product Specification
-     ↓
-System Architecture
-     ↓
-Database Schema
-     ↓
-API Design
-     ↓
-Authentication & Security
-     ↓
-Backend
-     ↓
-Frontend
-     ↓
-GitHub Integration
-     ↓
-Code Intelligence / RAG
-     ↓
-AI Assistant
-     ↓
-CI/CD Intelligence
-     ↓
-Testing
-     ↓
-Docker
-     ↓
-CI/CD
-     ↓
-Observability
-     ↓
-Deployment
-     ↓
-Documentation
-```
+MIT. See [LICENSE](LICENSE).
 
-The roadmap is intentionally incremental so that each layer can be designed, implemented, tested, and validated before introducing the next major subsystem.
+## Author
 
----
-
-## 🎯 Project Goals
-
-DevFlow AI is being built with production engineering principles in mind.
-
-### Maintainability
-
-Clear separation of concerns and modular architecture.
-
-### Scalability
-
-Architecture capable of evolving from a local development project into a multi-user engineering platform.
-
-### Security
-
-Authentication, authorization, data protection, and secure integrations are treated as core requirements.
-
-### Reliability
-
-Automated testing, database integrity, health checks, logging, and observability.
-
-### Developer Experience
-
-The platform should reduce context switching and make engineering information easier to discover.
-
-### AI-Native Engineering
-
-AI should work with the context of the actual project rather than functioning as a generic chatbot.
-
----
-
-## 📌 Project Status
-
-**Active development**
-
-DevFlow AI is currently in the backend foundation stage. Core infrastructure and domain capabilities are being implemented incrementally before moving into the larger GitHub, frontend, code-intelligence, and AI systems.
-
----
-
-## 📄 License
-
-License information will be added as the project approaches its first public release.
-
----
-
-## 👨‍💻 Author
-
-**Christopher Okoh**
-
-GitHub:
-
-`https://github.com/kristopher1027`
-
----
-
-> DevFlow AI is being built as an industry-grade software engineering project focused on combining developer productivity, project intelligence, GitHub integration, and AI-assisted software engineering into one platform.
+**Christopher Okoh**: [github.com/kristopher1027](https://github.com/kristopher1027)
