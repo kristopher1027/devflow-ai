@@ -9,9 +9,13 @@ COPY apps/api/ ./
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/devflow-api ./cmd/server
 
 FROM alpine:3.22
-RUN apk add --no-cache ca-certificates     && addgroup -S devflow     && adduser -S -G devflow devflow
+RUN apk add --no-cache ca-certificates wget \
+    && addgroup -S devflow \
+    && adduser -S -G devflow devflow
 WORKDIR /app
 COPY --from=build /out/devflow-api /app/devflow-api
 USER devflow
 EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget -q -O /dev/null http://127.0.0.1:8080/health || exit 1
 ENTRYPOINT ["/app/devflow-api"]
