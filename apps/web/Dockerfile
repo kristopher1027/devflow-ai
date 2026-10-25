@@ -8,9 +8,8 @@ RUN npm run build
 FROM nginx:1.28-alpine
 ENV DEVFLOW_API_SCHEME=http
 ENV DEVFLOW_API_HOSTPORT=api:8080
-ENV NGINX_ENVSUBST_FILTER=DEVFLOW_API_SCHEME DEVFLOW_API_HOSTPORT
+ENV NGINX_ENVSUBST_FILTER="DEVFLOW_API_(SCHEME|HOSTPORT)"
 COPY apps/web/nginx.conf /etc/nginx/templates/default.conf.template
 COPY --from=build /app/dist /usr/share/nginx/html
 EXPOSE 8080
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \\
-  CMD wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 CMD wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1
