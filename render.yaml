@@ -30,8 +30,7 @@ services:
     healthCheckPath: /health
     autoDeployTrigger: checksPass
     envVars:
+      - key: DEVFLOW_API_SCHEME
+        value: https
       - key: DEVFLOW_API_HOSTPORT
-        fromService:
-          name: devflow-api
-          type: web
-          property: hostport
+        value: devflow-api-n6ap.onrender.com
