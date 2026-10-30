@@ -36,6 +36,24 @@ type Config struct {
 	GitHubApp    GitHubAppConfig
 }
 
+func loadGitHubPrivateKey() string {
+	if key := os.Getenv("GITHUB_APP_PRIVATE_KEY"); strings.TrimSpace(key) != "" {
+		return key
+	}
+
+	path := strings.TrimSpace(os.Getenv("GITHUB_APP_PRIVATE_KEY_PATH"))
+	if path == "" {
+		return ""
+	}
+
+	key, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+
+	return string(key)
+}
+
 func Load() Config {
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -59,7 +77,7 @@ func Load() Config {
 		CookieSecure: cookieSecure,
 		GitHubApp: GitHubAppConfig{
 			AppID:      os.Getenv("GITHUB_APP_ID"),
-			PrivateKey: os.Getenv("GITHUB_APP_PRIVATE_KEY"),
+			PrivateKey: loadGitHubPrivateKey(),
 		},
 	}
 }
