@@ -54,17 +54,16 @@ export default function RepositoryPage({ id, onLogout }: PageProps) {
   async function sync() {
     setSyncing(true)
     setSyncError(null)
-    setSyncNote('Syncing… this can take a minute for a large repository.')
+    setSyncNote('Syncing repository. This may take a moment…')
 
     try {
       const started = await requestSync(id)
       await pollJob(() => getSyncJob(started.id))
-      setSyncNote('Sync finished. Ask away!')
+      setSyncNote('Repository sync completed successfully.')
     } catch (err) {
       setSyncNote(null)
       setSyncError(friendlyError(err))
     } finally {
-      // Refresh even after a failure: the sync may have finished on the server.
       repository.reload()
       setSyncing(false)
     }
@@ -73,7 +72,7 @@ export default function RepositoryPage({ id, onLogout }: PageProps) {
   async function ask(event?: FormEvent) {
     event?.preventDefault()
     const text = question.trim()
-    if (text === '') return
+    if (text === '' || asking) return
 
     setAsking(true)
     setAskError(null)
@@ -92,11 +91,14 @@ export default function RepositoryPage({ id, onLogout }: PageProps) {
 
   function onQuestionKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+      event.preventDefault()
       void ask()
     }
   }
 
   async function explain() {
+    if (explaining) return
+
     setExplaining(true)
     setExplainError(null)
 
@@ -125,72 +127,139 @@ export default function RepositoryPage({ id, onLogout }: PageProps) {
       onLogout={onLogout}
     >
       <ErrorText message={repository.error} />
-      {repository.loading && !repo && <Loading />}
+      {repository.loading && !repo && <Loading label="Loading repository…" />}
 
       {repo && (
         <>
-          <div className="row">
-            <div>
+          <div className="repo-heading">
+            <div className="repo-heading-main">
+              <div className="eyebrow">REPOSITORY WORKSPACE</div>
               <h1>{repo.FullName}</h1>
               <p className="muted">
-                <Badge status={repo.SyncStatus} /> · branch {repo.DefaultBranch} · last synced{' '}
-                {formatDate(repo.LastSyncedAt)} ·{' '}
-                <a href={repo.HTMLURL} target="_blank" rel="noreferrer">
-                  View on GitHub
-                </a>
+                Explore your codebase, ask questions, and understand how your software works.
               </p>
+              <div className="repo-heading-tags">
+                <Badge status={repo.SyncStatus} />
+                <span>{repo.IsPrivate ? 'Private repository' : 'Public repository'}</span>
+                <span>Default branch: {repo.DefaultBranch || 'Not specified'}</span>
+              </div>
             </div>
-            <button type="button" className="secondary" disabled={syncing} onClick={sync}>
-              {syncing ? 'Syncing…' : 'Sync now'}
-            </button>
+
+            <div className="repo-heading-actions">
+              <a href={repo.HTMLURL} target="_blank" rel="noreferrer" className="button secondary">
+                View on GitHub ↗
+              </a>
+              <button type="button" disabled={syncing} onClick={sync}>
+                {syncing ? 'Syncing…' : '↻ Sync repository'}
+              </button>
+            </div>
           </div>
+
           <Notice message={syncNote} />
           <ErrorText message={syncError} />
 
-          <section>
-            <h2>Ask about this code</h2>
-            <form onSubmit={ask} className="card stack">
-              <label>
-                Your question
-                <textarea
-                  rows={3}
-                  maxLength={MAX_QUESTION}
-                  placeholder="e.g. How are interrupted jobs recovered after a restart?"
-                  value={question}
-                  onChange={(e) => setQuestion(e.target.value)}
-                  onKeyDown={onQuestionKeyDown}
-                />
-              </label>
-              <div className="row">
+          <div className="repo-overview-stats">
+            <div className="repo-overview-stat">
+              <span className="repo-overview-icon">◈</span>
+              <div>
+                <span>Repository access</span>
+                <strong>{repo.IsPrivate ? 'Private' : 'Public'}</strong>
+              </div>
+            </div>
+            <div className="repo-overview-stat">
+              <span className="repo-overview-icon">⌘</span>
+              <div>
+                <span>Default branch</span>
+                <strong>{repo.DefaultBranch || 'Not specified'}</strong>
+              </div>
+            </div>
+            <div className="repo-overview-stat">
+              <span className="repo-overview-icon">↻</span>
+              <div>
+                <span>Last synced</span>
+                <strong>{formatDate(repo.LastSyncedAt)}</strong>
+              </div>
+            </div>
+          </div>
+
+          <section className="repo-ai-section">
+            <div className="repo-section-heading">
+              <div>
+                <div className="eyebrow">DEVFLOW AI ASSISTANT</div>
+                <h2>Understand your codebase</h2>
+                <p className="muted">
+                  Ask questions about this repository and get answers grounded in its indexed code.
+                </p>
+              </div>
+              <span className="repo-ai-indicator">✦ AI POWERED</span>
+            </div>
+
+            <form onSubmit={ask} className="repo-question-panel">
+              <label htmlFor="repository-question">What would you like to know?</label>
+              <textarea
+                id="repository-question"
+                rows={4}
+                maxLength={MAX_QUESTION}
+                placeholder="Ask about architecture, authentication, APIs, database access, background jobs…"
+                value={question}
+                onChange={(event) => setQuestion(event.target.value)}
+                onKeyDown={onQuestionKeyDown}
+              />
+              <div className="repo-question-footer">
                 <span className="muted">
                   {question.length}/{MAX_QUESTION} · Ctrl/⌘ + Enter to send
                 </span>
                 <button type="submit" disabled={asking || question.trim() === ''}>
-                  {asking ? 'Thinking…' : 'Ask'}
+                  {asking ? 'Analyzing code…' : 'Ask DevFlow AI →'}
                 </button>
               </div>
-              <div className="chips">
-                {EXAMPLE_QUESTIONS.map((example) => (
-                  <button
-                    key={example}
-                    type="button"
-                    className="chip"
-                    onClick={() => setQuestion(example)}
-                  >
-                    {example}
-                  </button>
-                ))}
+
+              <div className="repo-prompt-area">
+                <span className="muted">Try asking</span>
+                <div className="chips">
+                  {EXAMPLE_QUESTIONS.map((example) => (
+                    <button
+                      key={example}
+                      type="button"
+                      className="chip"
+                      disabled={asking}
+                      onClick={() => setQuestion(example)}
+                    >
+                      {example}
+                    </button>
+                  ))}
+                </div>
               </div>
             </form>
+
             <ErrorText message={askError} />
 
+            {asking && (
+              <div className="repo-thinking">
+                <span className="repo-thinking-dot" />
+                DevFlow AI is analyzing the repository…
+              </div>
+            )}
+
             {answer && (
-              <div className="card answer">
-                <p className="muted">Q: {askedQuestion}</p>
+              <div className="repo-result-card">
+                <div className="repo-result-heading">
+                  <div>
+                    <div className="eyebrow">AI RESPONSE</div>
+                    <h3>Answer</h3>
+                  </div>
+                  <span className="repo-commit">Commit {answer.commit_sha.slice(0, 7)}</span>
+                </div>
+                <div className="repo-question-asked">
+                  <span>YOUR QUESTION</span>
+                  <p>{askedQuestion}</p>
+                </div>
                 <Markdown text={answer.answer} />
+
                 {answer.sources.length > 0 && (
-                  <>
-                    <h3>Sources</h3>
+                  <div className="repo-sources">
+                    <h3>Source references</h3>
+                    <p className="muted">Open the referenced files on GitHub.</p>
                     <ul className="sources">
                       {answer.sources.map((source, index) => (
                         <li key={`${source.file_path}-${source.start_line}-${index}`}>
@@ -202,30 +271,64 @@ export default function RepositoryPage({ id, onLogout }: PageProps) {
                             <code>
                               {source.file_path}:{source.start_line}-{source.end_line}
                             </code>
+                            <span>↗</span>
                           </a>
                         </li>
                       ))}
                     </ul>
-                  </>
+                  </div>
                 )}
-                <p className="muted">Commit {answer.commit_sha.slice(0, 7)}</p>
               </div>
             )}
           </section>
 
-          <section>
-            <div className="row">
-              <h2>Explain this repository</h2>
-              <button type="button" disabled={explaining} onClick={explain}>
-                {explaining ? 'Reading the code…' : explanation ? 'Explain again' : 'Explain'}
+          <section className="repo-explain-section">
+            <div className="repo-section-heading">
+              <div>
+                <div className="eyebrow">CODEBASE OVERVIEW</div>
+                <h2>Repository explanation</h2>
+                <p className="muted">
+                  Generate an AI explanation of the repository based on its indexed code.
+                </p>
+              </div>
+              <button type="button" className="secondary" disabled={explaining} onClick={explain}>
+                {explaining
+                  ? 'Analyzing…'
+                  : explanation
+                    ? 'Regenerate explanation'
+                    : '✦ Explain repository'}
               </button>
             </div>
+
             <ErrorText message={explainError} />
-            {explanation && (
-              <div className="card answer">
-                <Markdown text={explanation.explanation} />
-                <p className="muted">Commit {explanation.commit_sha.slice(0, 7)}</p>
+
+            {explaining && (
+              <div className="repo-thinking">
+                <span className="repo-thinking-dot" />
+                Preparing your repository overview…
               </div>
+            )}
+
+            {explanation ? (
+              <div className="repo-result-card">
+                <div className="repo-result-heading">
+                  <h3>About this codebase</h3>
+                  <span className="repo-commit">Commit {explanation.commit_sha.slice(0, 7)}</span>
+                </div>
+                <Markdown text={explanation.explanation} />
+              </div>
+            ) : (
+              !explaining && (
+                <div className="repo-explain-empty">
+                  <span className="repo-overview-icon">✦</span>
+                  <div>
+                    <strong>Get a guided overview of this repository</strong>
+                    <p className="muted">
+                      Use DevFlow AI to generate an explanation of the codebase and its structure.
+                    </p>
+                  </div>
+                </div>
+              )
             )}
           </section>
         </>
