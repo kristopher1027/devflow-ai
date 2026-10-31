@@ -59,10 +59,15 @@ func (s *RepositoryChunkSearchServiceImpl) Search(
 		fetchLimit = 3
 	}
 
+	terms := tokenizeRepositorySearchQuery(query)
+	if len(terms) == 0 {
+		return nil, ErrRepositoryChunkSearchQueryRequired
+	}
+
 	results, err := s.chunkRepo.SearchBySnapshotID(
 		ctx,
 		snapshotID,
-		strings.TrimSpace(query),
+		strings.Join(terms, " "),
 		fetchLimit,
 	)
 	if err != nil {
@@ -140,22 +145,49 @@ func rankRepositoryChunkResults(
 }
 
 func tokenizeRepositorySearchQuery(query string) []string {
-	fields := strings.FieldsFunc(strings.ToLower(query), func(r rune) bool {
-		return unicode.IsSpace(r) || strings.ContainsRune(".,;:!?()[]{}<>/\\\\-_+=*#\"'`", r)
+	fields := strings.FieldsFunc(query, func(r rune) bool {
+		return unicode.IsSpace(r) ||
+			strings.ContainsRune(".,;:!?()[]{}<>/\\\\-_+=*#\"'`", r)
 	})
+
 	seen := make(map[string]struct{})
 	terms := make([]string, 0, len(fields))
+
 	for _, field := range fields {
-		if len([]rune(field)) < 2 {
-			continue
+		runes := []rune(field)
+		start := 0
+
+		for i := 1; i < len(runes); i++ {
+			prev, current := runes[i-1], runes[i]
+			nextIsLower := i+1 < len(runes) && unicode.IsLower(runes[i+1])
+
+			lowerToUpper := (unicode.IsLower(prev) || unicode.IsDigit(prev)) &&
+				unicode.IsUpper(current)
+			acronymBoundary := unicode.IsUpper(prev) &&
+				unicode.IsUpper(current) && nextIsLower
+
+			if lowerToUpper || acronymBoundary {
+				addRepositorySearchTerm(string(runes[start:i]), seen, &terms)
+				start = i
+			}
 		}
-		if _, ok := seen[field]; ok {
-			continue
-		}
-		seen[field] = struct{}{}
-		terms = append(terms, field)
+
+		addRepositorySearchTerm(string(runes[start:]), seen, &terms)
 	}
+
 	return terms
+}
+
+func addRepositorySearchTerm(value string, seen map[string]struct{}, terms *[]string) {
+	value = strings.ToLower(value)
+	if len([]rune(value)) < 2 {
+		return
+	}
+	if _, exists := seen[value]; exists {
+		return
+	}
+	seen[value] = struct{}{}
+	*terms = append(*terms, value)
 }
 
 var _ RepositoryChunkSearchService = (*RepositoryChunkSearchServiceImpl)(nil)
