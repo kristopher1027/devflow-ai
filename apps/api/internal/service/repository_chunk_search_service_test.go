@@ -51,6 +51,14 @@ func TestRepositoryChunkSearchTrimsAndDelegates(t *testing.T) {
 	require.Equal(t, 5, repo.limit)
 }
 
+func TestTokenizeRepositorySearchQuerySplitsIdentifiers(t *testing.T) {
+	require.Equal(
+		t,
+		[]string{"create", "workspace", "github", "app", "repository", "id"},
+		tokenizeRepositorySearchQuery("CreateWorkspace githubApp RepositoryID"),
+	)
+}
+
 func TestRepositoryChunkSearchRejectsEmptyQuery(t *testing.T) {
 	service := NewRepositoryChunkSearchService(&fakeRepositoryChunkSearchRepository{})
 

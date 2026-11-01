@@ -119,9 +119,14 @@ func (r *PostgresRepositoryChunkRepository) SearchBySnapshotID(
 		FROM repository_chunks c
 		INNER JOIN repository_files f ON f.id = c.file_id
 		WHERE f.snapshot_id = $1
-			AND (
-				c.content ILIKE '%' || $2 || '%'
-				OR f.path ILIKE '%' || $2 || '%'
+			AND EXISTS (
+				SELECT 1
+				FROM regexp_split_to_table(lower($2), '[[:space:]]+') AS search_term
+				WHERE length(search_term) >= 2
+					AND (
+						lower(c.content) LIKE '%' || search_term || '%'
+						OR lower(f.path) LIKE '%' || search_term || '%'
+					)
 			)
 		ORDER BY f.path ASC, c.chunk_index ASC
 		LIMIT $3
