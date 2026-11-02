@@ -27,6 +27,54 @@ func setupRepositoryChunkRepository(t *testing.T) (context.Context, RepositoryCh
 	return ctx, NewRepositoryChunkRepository(db), file.ID, db
 }
 
+func TestRepositoryChunkRepositorySearchRanksByMatchedTermsBeforeLimit(t *testing.T) {
+	ctx, repo, existingFileID, db := setupRepositoryChunkRepository(t)
+	var snapshotID string
+	if err := db.Pool.QueryRow(ctx, "SELECT snapshot_id FROM repository_files WHERE id = $1", existingFileID).Scan(&snapshotID); err != nil {
+		t.Fatalf("load snapshot ID: %v", err)
+	}
+	fileRepo := NewRepositoryFileRepository(db)
+	now := time.Now().UTC()
+
+	fixtures := []struct {
+		path    string
+		content string
+	}{
+		{path: "a_low_relevance.go", content: "repository is mentioned here"},
+		{path: "z_high_relevance.go", content: "repository snapshot chunk retrieval"},
+	}
+
+	for _, fixture := range fixtures {
+		file := &domain.RepositoryFile{
+			ID: uuid.NewString(), SnapshotID: snapshotID,
+			Path: fixture.path, SizeBytes: len(fixture.content),
+			Content: fixture.content, CreatedAt: now,
+		}
+		if err := fileRepo.Create(ctx, file); err != nil {
+			t.Fatalf("create repository file %q: %v", fixture.path, err)
+		}
+		chunk := &domain.RepositoryChunk{
+			ID: uuid.NewString(), FileID: file.ID, ChunkIndex: 0,
+			StartLine: 1, EndLine: 1, CharacterCount: len(fixture.content),
+			Content: fixture.content, CreatedAt: now,
+		}
+		if err := repo.Create(ctx, chunk); err != nil {
+			t.Fatalf("create chunk for %q: %v", fixture.path, err)
+		}
+	}
+
+	results, err := repo.SearchBySnapshotID(ctx, snapshotID, "repository snapshot chunk", 1)
+	if err != nil {
+		t.Fatalf("search repository chunks: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected exactly 1 result due to limit, got %d", len(results))
+	}
+	if results[0].FilePath != "z_high_relevance.go" {
+		t.Fatalf("expected highest-relevance file before limit, got %q", results[0].FilePath)
+	}
+}
+
 func TestRepositoryChunkRepositoryCreateAndFind(t *testing.T) {
 	ctx, repo, fileID, _ := setupRepositoryChunkRepository(t)
 	content := "package service\n\nfunc Example() {}\n"

@@ -105,6 +105,11 @@ func (r *PostgresRepositoryChunkRepository) SearchBySnapshotID(
 	rows, err := r.db.Pool.Query(
 		ctx,
 		`
+		WITH search_terms AS (
+			SELECT DISTINCT term
+			FROM regexp_split_to_table(lower($2), '[[:space:]]+') AS terms(term)
+			WHERE length(term) >= 2
+		)
 		SELECT
 			c.id,
 			c.file_id,
@@ -118,17 +123,18 @@ func (r *PostgresRepositoryChunkRepository) SearchBySnapshotID(
 			f.language
 		FROM repository_chunks c
 		INNER JOIN repository_files f ON f.id = c.file_id
+		CROSS JOIN LATERAL (
+			SELECT COUNT(*) AS matched_term_count
+			FROM search_terms st
+			WHERE strpos(lower(c.content), st.term) > 0
+				OR strpos(lower(f.path), st.term) > 0
+		) ranking
 		WHERE f.snapshot_id = $1
-			AND EXISTS (
-				SELECT 1
-				FROM regexp_split_to_table(lower($2), '[[:space:]]+') AS search_term
-				WHERE length(search_term) >= 2
-					AND (
-						lower(c.content) LIKE '%' || search_term || '%'
-						OR lower(f.path) LIKE '%' || search_term || '%'
-					)
-			)
-		ORDER BY f.path ASC, c.chunk_index ASC
+			AND ranking.matched_term_count > 0
+		ORDER BY
+			ranking.matched_term_count DESC,
+			f.path ASC,
+			c.chunk_index ASC
 		LIMIT $3
 		`,
 		snapshotID,
