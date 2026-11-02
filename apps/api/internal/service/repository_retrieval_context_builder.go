@@ -2,7 +2,6 @@ package service
 
 import (
 	"errors"
-	"sort"
 	"strings"
 	"unicode/utf8"
 
@@ -132,22 +131,6 @@ func (b *RepositoryRetrievalContextBuilderImpl) Build(
 		})
 	}
 
-	sort.SliceStable(context.Items, func(i, j int) bool {
-		left, right := context.Items[i], context.Items[j]
-		if left.FilePath != right.FilePath {
-			return left.FilePath < right.FilePath
-		}
-		if left.StartLine != right.StartLine {
-			return left.StartLine < right.StartLine
-		}
-		if left.EndLine != right.EndLine {
-			return left.EndLine < right.EndLine
-		}
-		if left.ChunkIndex != right.ChunkIndex {
-			return left.ChunkIndex < right.ChunkIndex
-		}
-		return left.ChunkID < right.ChunkID
-	})
 
 	return context, nil
 }
