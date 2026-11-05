@@ -47,7 +47,7 @@ func TestRepositoryChunkRepositorySearchRanksByMatchedTermsBeforeLimit(t *testin
 	for _, fixture := range fixtures {
 		file := &domain.RepositoryFile{
 			ID: uuid.NewString(), SnapshotID: snapshotID,
-			Path: fixture.path, SizeBytes: len(fixture.content),
+			Path: fixture.path, SizeBytes: int64(len(fixture.content)),
 			Content: fixture.content, CreatedAt: now,
 		}
 		if err := fileRepo.Create(ctx, file); err != nil {
