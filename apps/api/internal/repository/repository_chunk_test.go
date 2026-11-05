@@ -333,11 +333,11 @@ func TestRepositoryChunkRepositorySearchUsesDeterministicTieBreaking(t *testing.
 
 	for i, want := range expected {
 		if results[i].FilePath != want.path ||
-			results[i].ChunkIndex != want.chunkIndex {
+			results[i].Chunk.ChunkIndex != want.chunkIndex {
 			t.Fatalf(
 				"result %d: expected %s chunk %d, got %s chunk %d",
 				i, want.path, want.chunkIndex,
-				results[i].FilePath, results[i].ChunkIndex,
+				results[i].FilePath, results[i].Chunk.ChunkIndex,
 			)
 		}
 	}
