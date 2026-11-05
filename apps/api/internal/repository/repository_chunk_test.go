@@ -170,3 +170,175 @@ func TestRepositoryChunkRepositoryFileDeleteCascadesChunks(t *testing.T) {
 		t.Fatalf("expected ErrRepositoryChunkNotFound after file deletion, got %v", err)
 	}
 }
+
+
+func TestRepositoryChunkRepositorySearchIsolatesSnapshots(t *testing.T) {
+	ctx, repo, existingFileID, db := setupRepositoryChunkRepository(t)
+
+	var repositoryID string
+	if err := db.Pool.QueryRow(ctx, `
+		SELECT s.repository_id
+		FROM repository_snapshots s
+		INNER JOIN repository_files f ON f.snapshot_id = s.id
+		WHERE f.id = $1
+	`, existingFileID).Scan(&repositoryID); err != nil {
+		t.Fatalf("load repository ID: %v", err)
+	}
+
+	var firstSnapshotID string
+	if err := db.Pool.QueryRow(ctx, `
+		SELECT snapshot_id FROM repository_files WHERE id = $1
+	`, existingFileID).Scan(&firstSnapshotID); err != nil {
+		t.Fatalf("load first snapshot ID: %v", err)
+	}
+
+	secondSnapshot := &domain.RepositorySnapshot{
+		ID:           uuid.NewString(),
+		RepositoryID: repositoryID,
+		CommitSHA:    "snapshot-isolation-test-" + uuid.NewString(),
+		Branch:       "main",
+		CreatedAt:    time.Now().UTC(),
+	}
+	snapshotRepo := NewRepositorySnapshotRepository(db)
+	if err := snapshotRepo.Create(ctx, secondSnapshot); err != nil {
+		t.Fatalf("create second snapshot: %v", err)
+	}
+
+	fileRepo := NewRepositoryFileRepository(db)
+	now := time.Now().UTC()
+	fixtures := []struct {
+		snapshotID string
+		path       string
+		content    string
+	}{
+		{firstSnapshotID, "first.go", "snapshot isolation needle"},
+		{secondSnapshot.ID, "second.go", "snapshot isolation needle"},
+	}
+
+	for _, fixture := range fixtures {
+		file := &domain.RepositoryFile{
+			ID:         uuid.NewString(),
+			SnapshotID: fixture.snapshotID,
+			Path:       fixture.path,
+			SizeBytes:  int64(len(fixture.content)),
+			Content:    fixture.content,
+			CreatedAt:  now,
+		}
+		if err := fileRepo.Create(ctx, file); err != nil {
+			t.Fatalf("create file %q: %v", fixture.path, err)
+		}
+
+		chunk := &domain.RepositoryChunk{
+			ID:             uuid.NewString(),
+			FileID:         file.ID,
+			ChunkIndex:     0,
+			StartLine:      1,
+			EndLine:        1,
+			CharacterCount: len(fixture.content),
+			Content:        fixture.content,
+			CreatedAt:      now,
+		}
+		if err := repo.Create(ctx, chunk); err != nil {
+			t.Fatalf("create chunk for %q: %v", fixture.path, err)
+		}
+	}
+
+	results, err := repo.SearchBySnapshotID(
+		ctx, firstSnapshotID, "snapshot isolation needle", 10,
+	)
+	if err != nil {
+		t.Fatalf("search first snapshot: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result from first snapshot, got %d", len(results))
+	}
+	if results[0].FilePath != "first.go" {
+		t.Fatalf("expected first.go, got %q", results[0].FilePath)
+	}
+}
+
+func TestRepositoryChunkRepositorySearchUsesDeterministicTieBreaking(t *testing.T) {
+	ctx, repo, existingFileID, db := setupRepositoryChunkRepository(t)
+
+	var snapshotID string
+	if err := db.Pool.QueryRow(ctx, `
+		SELECT snapshot_id FROM repository_files WHERE id = $1
+	`, existingFileID).Scan(&snapshotID); err != nil {
+		t.Fatalf("load snapshot ID: %v", err)
+	}
+
+	fileRepo := NewRepositoryFileRepository(db)
+	now := time.Now().UTC()
+	files := make(map[string]string)
+
+	fixtures := []struct {
+		path       string
+		chunkIndex int
+	}{
+		{path: "z-last.go", chunkIndex: 0},
+		{path: "a-first.go", chunkIndex: 1},
+		{path: "a-first.go", chunkIndex: 0},
+	}
+
+	for _, fixture := range fixtures {
+		fileID, exists := files[fixture.path]
+		if !exists {
+			file := &domain.RepositoryFile{
+				ID:         uuid.NewString(),
+				SnapshotID: snapshotID,
+				Path:       fixture.path,
+				SizeBytes:  int64(len("retrieval needle")),
+				Content:    "retrieval needle",
+				CreatedAt:  now,
+			}
+			if err := fileRepo.Create(ctx, file); err != nil {
+				t.Fatalf("create file %q: %v", fixture.path, err)
+			}
+			fileID = file.ID
+			files[fixture.path] = fileID
+		}
+
+		chunk := &domain.RepositoryChunk{
+			ID:             uuid.NewString(),
+			FileID:         fileID,
+			ChunkIndex:     fixture.chunkIndex,
+			StartLine:      1,
+			EndLine:        1,
+			CharacterCount: len("retrieval needle"),
+			Content:        "retrieval needle",
+			CreatedAt:      now,
+		}
+		if err := repo.Create(ctx, chunk); err != nil {
+			t.Fatalf("create chunk %q index %d: %v",
+				fixture.path, fixture.chunkIndex, err)
+		}
+	}
+
+	results, err := repo.SearchBySnapshotID(ctx, snapshotID, "retrieval needle", 10)
+	if err != nil {
+		t.Fatalf("search repository chunks: %v", err)
+	}
+
+	expected := []struct {
+		path       string
+		chunkIndex int
+	}{
+		{path: "a-first.go", chunkIndex: 0},
+		{path: "a-first.go", chunkIndex: 1},
+		{path: "z-last.go", chunkIndex: 0},
+	}
+	if len(results) != len(expected) {
+		t.Fatalf("expected %d results, got %d", len(expected), len(results))
+	}
+
+	for i, want := range expected {
+		if results[i].FilePath != want.path ||
+			results[i].ChunkIndex != want.chunkIndex {
+			t.Fatalf(
+				"result %d: expected %s chunk %d, got %s chunk %d",
+				i, want.path, want.chunkIndex,
+				results[i].FilePath, results[i].ChunkIndex,
+			)
+		}
+	}
+}
