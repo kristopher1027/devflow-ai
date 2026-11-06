@@ -240,6 +240,30 @@ func (w *RepositorySyncWorker) runWithRetry(
 	return err
 }
 
+// RecoverInterruptedJobs fails jobs left pending or running by a previous process.
+func (w *RepositorySyncWorker) RecoverInterruptedJobs(
+	ctx context.Context,
+	processStartedAt time.Time,
+) (int64, error) {
+	if w.jobs == nil {
+		return 0, nil
+	}
+
+	recovered, err := w.jobs.FailInterrupted(
+		ctx,
+		processStartedAt,
+		domain.RepositorySyncJobFailureCodeInterrupted,
+		"repository sync interrupted by process restart",
+	)
+	if err != nil {
+		return 0, err
+	}
+	if recovered > 0 {
+		w.metrics.Failed.Add(uint64(recovered))
+	}
+	return recovered, nil
+}
+
 func (w *RepositorySyncWorker) Metrics() RepositorySyncMetricsSnapshot {
 	return w.metrics.Snapshot()
 }
