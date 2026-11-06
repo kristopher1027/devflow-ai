@@ -45,6 +45,15 @@ func (f *fakeRepositorySyncJobRepository) ListByRepositoryID(
 	return nil, nil
 }
 
+func (f *fakeRepositorySyncJobRepository) FailInterrupted(
+	ctx context.Context,
+	updatedBefore time.Time,
+	code string,
+	message string,
+) (int64, error) {
+	return 0, nil
+}
+
 func (f *fakeRepositorySyncJobRepository) MarkRunning(
 	ctx context.Context,
 	id string,

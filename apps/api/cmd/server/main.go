@@ -274,6 +274,15 @@ func main() {
 		log.Printf("marked %d interrupted import jobs as failed", recovered)
 	}
 
+	if recovered, err := repositorySyncWorker.RecoverInterruptedJobs(
+		ctx,
+		processStartedAt,
+	); err != nil {
+		log.Printf("recover interrupted repository sync jobs: %v", err)
+	} else if recovered > 0 {
+		log.Printf("marked %d interrupted repository sync jobs as failed", recovered)
+	}
+
 	go githubRepositoryImportWorker.Start(jobContext)
 	go repositorySyncWorker.Start(jobContext)
 	// Router

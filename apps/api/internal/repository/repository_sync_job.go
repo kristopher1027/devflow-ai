@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/kristopher1027/devflow-ai/internal/domain"
 )
@@ -46,4 +47,13 @@ type RepositorySyncJobRepository interface {
 		code string,
 		message string,
 	) error
+
+	// FailInterrupted marks pending/running jobs updated before the cutoff
+	// as failed and returns the number of jobs changed.
+	FailInterrupted(
+		ctx context.Context,
+		updatedBefore time.Time,
+		code string,
+		message string,
+	) (int64, error)
 }
