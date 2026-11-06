@@ -231,6 +231,14 @@ func (r *repositorySyncJobStore) Create(
 	return nil
 }
 
+func (r *repositorySyncJobStore) ClaimNext(
+	ctx context.Context,
+	workerID string,
+	leaseDuration time.Duration,
+) (*domain.RepositorySyncJob, error) {
+	return nil, nil
+}
+
 func (r *repositorySyncJobStore) FindByID(
 	ctx context.Context,
 	id string,
