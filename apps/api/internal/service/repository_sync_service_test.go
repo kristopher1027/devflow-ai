@@ -73,8 +73,9 @@ type fakeRepositorySnapshotRepository struct {
 	createCalls     int
 	snapshot        *domain.RepositorySnapshot
 	findErr         error
-	createErr       error
-	createdSnapshot *domain.RepositorySnapshot
+	createErr           error
+	createdSnapshot     *domain.RepositorySnapshot
+	snapshotAfterCreate *domain.RepositorySnapshot
 }
 
 func (f *fakeRepositorySnapshotRepository) Create(
@@ -83,6 +84,11 @@ func (f *fakeRepositorySnapshotRepository) Create(
 ) error {
 	f.createCalls++
 	f.createdSnapshot = snapshot
+
+	if f.snapshotAfterCreate != nil {
+		f.snapshot = f.snapshotAfterCreate
+		f.findErr = nil
+	}
 
 	return f.createErr
 }
@@ -939,5 +945,82 @@ func TestRepositorySyncServicePropagatesUpdateSyncStatusError(t *testing.T) {
 			"expected UpdateSyncStatus to be called once, got %d",
 			repositoryRepo.updateCalls,
 		)
+	}
+}
+
+func TestRepositorySyncServiceReturnsSnapshotCreatedConcurrently(t *testing.T) {
+	repo := &domain.Repository{
+		ID:            "repository-1",
+		ProjectID:     "project-1",
+		Owner:         "devflow-test",
+		Name:          "sync-test-repository",
+		DefaultBranch: "main",
+	}
+
+	existingSnapshot := &domain.RepositorySnapshot{
+		ID:           "snapshot-created-by-another-worker",
+		RepositoryID: repo.ID,
+		CommitSHA:    "abc123",
+		Branch:       "main",
+	}
+
+	repositoryRepo := &fakeRepositorySyncRepository{
+		repository: repo,
+	}
+
+	projectRepo := &fakeProjectRepository{
+		project: &domain.Project{
+			ID:          "project-1",
+			WorkspaceID: "workspace-1",
+		},
+	}
+
+	githubConnectionRepo := &fakeGitHubConnectionRepository{
+		connection: &domain.GitHubConnection{
+			ID:             "connection-1",
+			WorkspaceID:    "workspace-1",
+			InstallationID: "installation-123",
+			AccountLogin:   "devflow-test",
+			Status:         domain.GitHubConnectionStatusActive,
+		},
+	}
+
+	snapshotRepo := &fakeRepositorySnapshotRepository{
+		findErr:             repository.ErrRepositorySnapshotNotFound,
+		createErr:           repository.ErrRepositorySnapshotAlreadyExists,
+		snapshotAfterCreate: existingSnapshot,
+	}
+
+	githubClient := &fakeRepositoryClient{
+		commitSHA: "abc123",
+	}
+
+	service := NewRepositorySyncService(
+		repositoryRepo,
+		projectRepo,
+		githubConnectionRepo,
+		snapshotRepo,
+		githubClient,
+	)
+
+	result, err := service.Sync(context.Background(), repo.ID)
+	if err != nil {
+		t.Fatalf("expected concurrent snapshot to be returned, got %v", err)
+	}
+
+	if result != existingSnapshot {
+		t.Fatal("expected snapshot created by the other worker")
+	}
+
+	if snapshotRepo.createCalls != 1 {
+		t.Fatalf("expected one create attempt, got %d", snapshotRepo.createCalls)
+	}
+
+	if snapshotRepo.findCalls != 2 {
+		t.Fatalf("expected two snapshot lookups, got %d", snapshotRepo.findCalls)
+	}
+
+	if repositoryRepo.updateCalls != 0 {
+		t.Fatal("expected no repository status update on concurrent insert")
 	}
 }
