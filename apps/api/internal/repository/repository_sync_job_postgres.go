@@ -32,9 +32,9 @@ func (r *PostgresRepositorySyncJobRepository) Create(
 		INSERT INTO repository_sync_jobs (
 			id, repository_id, status, attempts, failure_code,
 			failure_message, created_at, updated_at, completed_at,
-		       lease_owner, lease_expires_at
+			lease_owner, lease_expires_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 	`
 
 	_, err := r.db.Pool.Exec(
@@ -52,7 +52,8 @@ func (r *PostgresRepositorySyncJobRepository) FindByID(
 ) (*domain.RepositorySyncJob, error) {
 	const query = `
 		SELECT id, repository_id, status, attempts, failure_code,
-		       failure_message, created_at, updated_at, completed_at
+		       failure_message, created_at, updated_at, completed_at,
+		       lease_owner, lease_expires_at
 		FROM repository_sync_jobs
 		WHERE id = $1
 	`
@@ -200,7 +201,8 @@ func (r *PostgresRepositorySyncJobRepository) FailInterrupted(
 	result, err := r.db.Pool.Exec(ctx, `
 		UPDATE repository_sync_jobs
 		SET status = $1, failure_code = $2, failure_message = $3,
-		    updated_at = NOW(), completed_at = NOW()
+		    updated_at = NOW(), completed_at = NOW(),
+		    lease_owner = NULL, lease_expires_at = NULL
 		WHERE status IN ($4, $5) AND updated_at < $6
 	`,
 		domain.RepositorySyncJobStatusFailed, code, message,
@@ -242,8 +244,8 @@ func (r *PostgresRepositorySyncJobRepository) ClaimNext(
 					)
 			   )
 			ORDER BY created_at ASC, id ASC
-			FOR UPDATE SKIP LOCKED
 			LIMIT 1
+			FOR UPDATE SKIP LOCKED
 		)
 		UPDATE repository_sync_jobs AS job
 		SET status = $4,
