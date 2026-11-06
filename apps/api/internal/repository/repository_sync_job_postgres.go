@@ -40,7 +40,7 @@ func (r *PostgresRepositorySyncJobRepository) Create(
 	_, err := r.db.Pool.Exec(
 		ctx, query, job.ID, job.RepositoryID, job.Status, job.Attempts,
 		job.FailureCode, job.FailureMessage, job.CreatedAt, job.UpdatedAt,
-		job.CompletedAt,
+		job.CompletedAt, job.LeaseOwner, job.LeaseExpiresAt,
 	)
 
 	return err
@@ -102,6 +102,7 @@ func (r *PostgresRepositorySyncJobRepository) ListByRepositoryID(
 			&job.ID, &job.RepositoryID, &job.Status, &job.Attempts,
 			&job.FailureCode, &job.FailureMessage, &job.CreatedAt,
 			&job.UpdatedAt, &job.CompletedAt,
+			&job.LeaseOwner, &job.LeaseExpiresAt,
 		); err != nil {
 			return nil, err
 		}
