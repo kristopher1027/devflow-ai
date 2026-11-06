@@ -3,6 +3,8 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -28,30 +30,15 @@ func (r *PostgresRepositorySyncJobRepository) Create(
 ) error {
 	const query = `
 		INSERT INTO repository_sync_jobs (
-			id,
-			repository_id,
-			status,
-			attempts,
-			failure_code,
-			failure_message,
-			created_at,
-			updated_at,
-			completed_at
+			id, repository_id, status, attempts, failure_code,
+			failure_message, created_at, updated_at, completed_at
 		)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	`
 
 	_, err := r.db.Pool.Exec(
-		ctx,
-		query,
-		job.ID,
-		job.RepositoryID,
-		job.Status,
-		job.Attempts,
-		job.FailureCode,
-		job.FailureMessage,
-		job.CreatedAt,
-		job.UpdatedAt,
+		ctx, query, job.ID, job.RepositoryID, job.Status, job.Attempts,
+		job.FailureCode, job.FailureMessage, job.CreatedAt, job.UpdatedAt,
 		job.CompletedAt,
 	)
 
@@ -63,16 +50,8 @@ func (r *PostgresRepositorySyncJobRepository) FindByID(
 	id string,
 ) (*domain.RepositorySyncJob, error) {
 	const query = `
-		SELECT
-			id,
-			repository_id,
-			status,
-			attempts,
-			failure_code,
-			failure_message,
-			created_at,
-			updated_at,
-			completed_at
+		SELECT id, repository_id, status, attempts, failure_code,
+		       failure_message, created_at, updated_at, completed_at
 		FROM repository_sync_jobs
 		WHERE id = $1
 	`
@@ -80,21 +59,14 @@ func (r *PostgresRepositorySyncJobRepository) FindByID(
 	job := &domain.RepositorySyncJob{}
 
 	err := r.db.Pool.QueryRow(ctx, query, id).Scan(
-		&job.ID,
-		&job.RepositoryID,
-		&job.Status,
-		&job.Attempts,
-		&job.FailureCode,
-		&job.FailureMessage,
-		&job.CreatedAt,
-		&job.UpdatedAt,
-		&job.CompletedAt,
+		&job.ID, &job.RepositoryID, &job.Status, &job.Attempts,
+		&job.FailureCode, &job.FailureMessage, &job.CreatedAt,
+		&job.UpdatedAt, &job.CompletedAt,
 	)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrRepositorySyncJobNotFound
 	}
-
 	if err != nil {
 		return nil, err
 	}
@@ -107,16 +79,8 @@ func (r *PostgresRepositorySyncJobRepository) ListByRepositoryID(
 	repositoryID string,
 ) ([]*domain.RepositorySyncJob, error) {
 	const query = `
-		SELECT
-			id,
-			repository_id,
-			status,
-			attempts,
-			failure_code,
-			failure_message,
-			created_at,
-			updated_at,
-			completed_at
+		SELECT id, repository_id, status, attempts, failure_code,
+		       failure_message, created_at, updated_at, completed_at
 		FROM repository_sync_jobs
 		WHERE repository_id = $1
 		ORDER BY created_at DESC
@@ -129,31 +93,21 @@ func (r *PostgresRepositorySyncJobRepository) ListByRepositoryID(
 	defer rows.Close()
 
 	var jobs []*domain.RepositorySyncJob
-
 	for rows.Next() {
 		job := &domain.RepositorySyncJob{}
-
 		if err := rows.Scan(
-			&job.ID,
-			&job.RepositoryID,
-			&job.Status,
-			&job.Attempts,
-			&job.FailureCode,
-			&job.FailureMessage,
-			&job.CreatedAt,
-			&job.UpdatedAt,
-			&job.CompletedAt,
+			&job.ID, &job.RepositoryID, &job.Status, &job.Attempts,
+			&job.FailureCode, &job.FailureMessage, &job.CreatedAt,
+			&job.UpdatedAt, &job.CompletedAt,
 		); err != nil {
 			return nil, err
 		}
-
 		jobs = append(jobs, job)
 	}
 
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-
 	return jobs, nil
 }
 
@@ -164,28 +118,19 @@ func (r *PostgresRepositorySyncJobRepository) MarkRunning(
 ) error {
 	const query = `
 		UPDATE repository_sync_jobs
-		SET
-			status = $2,
-			attempts = $3,
-			updated_at = now()
+		SET status = $2, attempts = $3, updated_at = now()
 		WHERE id = $1
 	`
 
 	result, err := r.db.Pool.Exec(
-		ctx,
-		query,
-		id,
-		domain.RepositorySyncJobStatusRunning,
-		attempts,
+		ctx, query, id, domain.RepositorySyncJobStatusRunning, attempts,
 	)
 	if err != nil {
 		return err
 	}
-
 	if result.RowsAffected() == 0 {
 		return ErrRepositorySyncJobNotFound
 	}
-
 	return nil
 }
 
@@ -196,31 +141,20 @@ func (r *PostgresRepositorySyncJobRepository) MarkSucceeded(
 ) error {
 	const query = `
 		UPDATE repository_sync_jobs
-		SET
-			status = $2,
-			attempts = $3,
-			failure_code = NULL,
-			failure_message = NULL,
-			updated_at = now(),
-			completed_at = now()
+		SET status = $2, attempts = $3, failure_code = NULL,
+		    failure_message = NULL, updated_at = now(), completed_at = now()
 		WHERE id = $1
 	`
 
 	result, err := r.db.Pool.Exec(
-		ctx,
-		query,
-		id,
-		domain.RepositorySyncJobStatusSucceeded,
-		attempts,
+		ctx, query, id, domain.RepositorySyncJobStatusSucceeded, attempts,
 	)
 	if err != nil {
 		return err
 	}
-
 	if result.RowsAffected() == 0 {
 		return ErrRepositorySyncJobNotFound
 	}
-
 	return nil
 }
 
@@ -233,32 +167,45 @@ func (r *PostgresRepositorySyncJobRepository) MarkFailed(
 ) error {
 	const query = `
 		UPDATE repository_sync_jobs
-		SET
-			status = $2,
-			attempts = $3,
-			failure_code = $4,
-			failure_message = $5,
-			updated_at = now(),
-			completed_at = now()
+		SET status = $2, attempts = $3, failure_code = $4,
+		    failure_message = $5, updated_at = now(), completed_at = now()
 		WHERE id = $1
 	`
 
 	result, err := r.db.Pool.Exec(
-		ctx,
-		query,
-		id,
-		domain.RepositorySyncJobStatusFailed,
-		attempts,
-		code,
-		message,
+		ctx, query, id, domain.RepositorySyncJobStatusFailed, attempts,
+		code, message,
 	)
 	if err != nil {
 		return err
 	}
-
 	if result.RowsAffected() == 0 {
 		return ErrRepositorySyncJobNotFound
 	}
-
 	return nil
+}
+
+// FailInterrupted marks only pending or running jobs older than the startup
+// cutoff as failed. Completed jobs and jobs created by this process are safe.
+func (r *PostgresRepositorySyncJobRepository) FailInterrupted(
+	ctx context.Context,
+	updatedBefore time.Time,
+	code string,
+	message string,
+) (int64, error) {
+	result, err := r.db.Pool.Exec(ctx, `
+		UPDATE repository_sync_jobs
+		SET status = $1, failure_code = $2, failure_message = $3,
+		    updated_at = NOW(), completed_at = NOW()
+		WHERE status IN ($4, $5) AND updated_at < $6
+	`,
+		domain.RepositorySyncJobStatusFailed, code, message,
+		domain.RepositorySyncJobStatusPending,
+		domain.RepositorySyncJobStatusRunning,
+		updatedBefore,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("fail interrupted repository sync jobs: %w", err)
+	}
+	return result.RowsAffected(), nil
 }
