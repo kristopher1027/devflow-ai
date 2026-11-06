@@ -22,4 +22,6 @@ type RepositorySyncJob struct {
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 	CompletedAt    *time.Time
+	LeaseOwner     *string
+	LeaseExpiresAt *time.Time
 }
