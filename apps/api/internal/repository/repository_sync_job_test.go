@@ -302,3 +302,66 @@ func TestRepositorySyncJobRepositoryNotFound(t *testing.T) {
 		)
 	}
 }
+
+func TestRepositorySyncJobRepositoryFailInterrupted(t *testing.T) {
+	ctx, _, repo, repositoryID := setupRepositorySyncJobRepository(t)
+	stale := time.Now().Add(-time.Hour)
+	cutoff := time.Now().Add(-30 * time.Minute)
+
+	createJob := func(status string, updatedAt time.Time) *domain.RepositorySyncJob {
+		job := &domain.RepositorySyncJob{
+			ID: uuid.NewString(), RepositoryID: repositoryID,
+			Status: status, CreatedAt: updatedAt, UpdatedAt: updatedAt,
+		}
+		if err := repo.Create(ctx, job); err != nil {
+			t.Fatalf("create sync job: %v", err)
+		}
+		return job
+	}
+
+	pending := createJob(domain.RepositorySyncJobStatusPending, stale)
+	running := createJob(domain.RepositorySyncJobStatusRunning, stale)
+	succeeded := createJob(domain.RepositorySyncJobStatusSucceeded, stale)
+	fresh := createJob(domain.RepositorySyncJobStatusRunning, time.Now())
+
+	count, err := repo.FailInterrupted(
+		ctx, cutoff,
+		domain.RepositorySyncJobFailureCodeInterrupted,
+		"repository sync interrupted by process restart",
+	)
+	if err != nil {
+		t.Fatalf("fail interrupted jobs: %v", err)
+	}
+	if count != 2 {
+		t.Fatalf("expected 2 recovered jobs, got %d", count)
+	}
+
+	for _, id := range []string{pending.ID, running.ID} {
+		got, err := repo.FindByID(ctx, id)
+		if err != nil {
+			t.Fatalf("find recovered job: %v", err)
+		}
+		if got.Status != domain.RepositorySyncJobStatusFailed ||
+			got.FailureCode == nil ||
+			*got.FailureCode != domain.RepositorySyncJobFailureCodeInterrupted ||
+			got.CompletedAt == nil {
+			t.Fatalf("job %s was not recovered: %+v", id, got)
+		}
+	}
+
+	done, err := repo.FindByID(ctx, succeeded.ID)
+	if err != nil {
+		t.Fatalf("find succeeded job: %v", err)
+	}
+	if done.Status != domain.RepositorySyncJobStatusSucceeded {
+		t.Fatalf("completed job changed to %q", done.Status)
+	}
+
+	recent, err := repo.FindByID(ctx, fresh.ID)
+	if err != nil {
+		t.Fatalf("find recent job: %v", err)
+	}
+	if recent.Status != domain.RepositorySyncJobStatusRunning {
+		t.Fatalf("recent job changed to %q", recent.Status)
+	}
+}
