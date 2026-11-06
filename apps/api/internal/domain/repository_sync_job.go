@@ -9,6 +9,7 @@ const (
 	RepositorySyncJobStatusFailed    = "failed"
 
 	RepositorySyncJobFailureCodeWorkerShutdown = "worker_shutdown"
+	RepositorySyncJobFailureCodeInterrupted    = "worker_interrupted"
 )
 
 type RepositorySyncJob struct {
