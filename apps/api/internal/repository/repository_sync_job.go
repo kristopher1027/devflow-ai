@@ -28,6 +28,14 @@ type RepositorySyncJobRepository interface {
 		repositoryID string,
 	) ([]*domain.RepositorySyncJob, error)
 
+	// ClaimNext atomically claims the oldest pending job or a running job
+	// whose lease has expired. It returns nil when no job is currently claimable.
+	ClaimNext(
+		ctx context.Context,
+		workerID string,
+		leaseDuration time.Duration,
+	) (*domain.RepositorySyncJob, error)
+
 	MarkRunning(
 		ctx context.Context,
 		id string,

@@ -24,6 +24,14 @@ func (f *fakeRepositorySyncJobRepository) Create(
 	return nil
 }
 
+func (f *fakeRepositorySyncJobRepository) ClaimNext(
+	ctx context.Context,
+	workerID string,
+	leaseDuration time.Duration,
+) (*domain.RepositorySyncJob, error) {
+	return nil, nil
+}
+
 func (f *fakeRepositorySyncJobRepository) FindByID(
 	ctx context.Context,
 	id string,

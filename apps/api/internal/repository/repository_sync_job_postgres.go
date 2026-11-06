@@ -31,15 +31,16 @@ func (r *PostgresRepositorySyncJobRepository) Create(
 	const query = `
 		INSERT INTO repository_sync_jobs (
 			id, repository_id, status, attempts, failure_code,
-			failure_message, created_at, updated_at, completed_at
+			failure_message, created_at, updated_at, completed_at,
+			lease_owner, lease_expires_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 	`
 
 	_, err := r.db.Pool.Exec(
 		ctx, query, job.ID, job.RepositoryID, job.Status, job.Attempts,
 		job.FailureCode, job.FailureMessage, job.CreatedAt, job.UpdatedAt,
-		job.CompletedAt,
+		job.CompletedAt, job.LeaseOwner, job.LeaseExpiresAt,
 	)
 
 	return err
@@ -51,7 +52,8 @@ func (r *PostgresRepositorySyncJobRepository) FindByID(
 ) (*domain.RepositorySyncJob, error) {
 	const query = `
 		SELECT id, repository_id, status, attempts, failure_code,
-		       failure_message, created_at, updated_at, completed_at
+		       failure_message, created_at, updated_at, completed_at,
+		       lease_owner, lease_expires_at
 		FROM repository_sync_jobs
 		WHERE id = $1
 	`
@@ -62,6 +64,7 @@ func (r *PostgresRepositorySyncJobRepository) FindByID(
 		&job.ID, &job.RepositoryID, &job.Status, &job.Attempts,
 		&job.FailureCode, &job.FailureMessage, &job.CreatedAt,
 		&job.UpdatedAt, &job.CompletedAt,
+		&job.LeaseOwner, &job.LeaseExpiresAt,
 	)
 
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -80,7 +83,8 @@ func (r *PostgresRepositorySyncJobRepository) ListByRepositoryID(
 ) ([]*domain.RepositorySyncJob, error) {
 	const query = `
 		SELECT id, repository_id, status, attempts, failure_code,
-		       failure_message, created_at, updated_at, completed_at
+		       failure_message, created_at, updated_at, completed_at,
+		       lease_owner, lease_expires_at
 		FROM repository_sync_jobs
 		WHERE repository_id = $1
 		ORDER BY created_at DESC
@@ -99,6 +103,7 @@ func (r *PostgresRepositorySyncJobRepository) ListByRepositoryID(
 			&job.ID, &job.RepositoryID, &job.Status, &job.Attempts,
 			&job.FailureCode, &job.FailureMessage, &job.CreatedAt,
 			&job.UpdatedAt, &job.CompletedAt,
+			&job.LeaseOwner, &job.LeaseExpiresAt,
 		); err != nil {
 			return nil, err
 		}
@@ -142,7 +147,8 @@ func (r *PostgresRepositorySyncJobRepository) MarkSucceeded(
 	const query = `
 		UPDATE repository_sync_jobs
 		SET status = $2, attempts = $3, failure_code = NULL,
-		    failure_message = NULL, updated_at = now(), completed_at = now()
+		    failure_message = NULL, updated_at = now(), completed_at = now(),
+		    lease_owner = NULL, lease_expires_at = NULL
 		WHERE id = $1
 	`
 
@@ -168,7 +174,8 @@ func (r *PostgresRepositorySyncJobRepository) MarkFailed(
 	const query = `
 		UPDATE repository_sync_jobs
 		SET status = $2, attempts = $3, failure_code = $4,
-		    failure_message = $5, updated_at = now(), completed_at = now()
+		    failure_message = $5, updated_at = now(), completed_at = now(),
+		    lease_owner = NULL, lease_expires_at = NULL
 		WHERE id = $1
 	`
 
@@ -196,7 +203,8 @@ func (r *PostgresRepositorySyncJobRepository) FailInterrupted(
 	result, err := r.db.Pool.Exec(ctx, `
 		UPDATE repository_sync_jobs
 		SET status = $1, failure_code = $2, failure_message = $3,
-		    updated_at = NOW(), completed_at = NOW()
+		    updated_at = NOW(), completed_at = NOW(),
+		    lease_owner = NULL, lease_expires_at = NULL
 		WHERE status IN ($4, $5) AND updated_at < $6
 	`,
 		domain.RepositorySyncJobStatusFailed, code, message,
@@ -208,4 +216,80 @@ func (r *PostgresRepositorySyncJobRepository) FailInterrupted(
 		return 0, fmt.Errorf("fail interrupted repository sync jobs: %w", err)
 	}
 	return result.RowsAffected(), nil
+}
+
+
+// ClaimNext uses PostgreSQL row locking to ensure that concurrent workers
+// cannot claim the same job. Expired running jobs are eligible for recovery.
+func (r *PostgresRepositorySyncJobRepository) ClaimNext(
+	ctx context.Context,
+	workerID string,
+	leaseDuration time.Duration,
+) (*domain.RepositorySyncJob, error) {
+	if workerID == "" {
+		return nil, errors.New("repository sync worker ID is required")
+	}
+	if leaseDuration <= 0 {
+		return nil, errors.New("repository sync job lease duration must be positive")
+	}
+
+	const query = `
+		WITH candidate AS (
+			SELECT id
+			FROM repository_sync_jobs
+			WHERE status = $3
+			   OR (
+					status = $4
+					AND (
+						lease_expires_at IS NULL
+						OR lease_expires_at <= NOW()
+					)
+			   )
+			ORDER BY created_at ASC, id ASC
+			LIMIT 1
+			FOR UPDATE SKIP LOCKED
+		)
+		UPDATE repository_sync_jobs AS job
+		SET status = $4,
+		    attempts = job.attempts + 1,
+		    lease_owner = $1,
+		    lease_expires_at = NOW() + $2::interval,
+		    updated_at = NOW()
+		FROM candidate
+		WHERE job.id = candidate.id
+		RETURNING job.id, job.repository_id, job.status, job.attempts,
+		          job.failure_code, job.failure_message, job.created_at,
+		          job.updated_at, job.completed_at, job.lease_owner,
+		          job.lease_expires_at
+	`
+
+	job := &domain.RepositorySyncJob{}
+	err := r.db.Pool.QueryRow(
+		ctx,
+		query,
+		workerID,
+		leaseDuration.String(),
+		domain.RepositorySyncJobStatusPending,
+		domain.RepositorySyncJobStatusRunning,
+	).Scan(
+		&job.ID,
+		&job.RepositoryID,
+		&job.Status,
+		&job.Attempts,
+		&job.FailureCode,
+		&job.FailureMessage,
+		&job.CreatedAt,
+		&job.UpdatedAt,
+		&job.CompletedAt,
+		&job.LeaseOwner,
+		&job.LeaseExpiresAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("claim repository sync job: %w", err)
+	}
+
+	return job, nil
 }
