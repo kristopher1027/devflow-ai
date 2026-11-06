@@ -83,7 +83,8 @@ func (r *PostgresRepositorySyncJobRepository) ListByRepositoryID(
 ) ([]*domain.RepositorySyncJob, error) {
 	const query = `
 		SELECT id, repository_id, status, attempts, failure_code,
-		       failure_message, created_at, updated_at, completed_at
+		       failure_message, created_at, updated_at, completed_at,
+		       lease_owner, lease_expires_at
 		FROM repository_sync_jobs
 		WHERE repository_id = $1
 		ORDER BY created_at DESC
