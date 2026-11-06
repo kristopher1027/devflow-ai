@@ -365,3 +365,92 @@ func TestRepositorySyncJobRepositoryFailInterrupted(t *testing.T) {
 		t.Fatalf("recent job changed to %q", recent.Status)
 	}
 }
+
+
+func TestRepositorySyncJobRepositoryClaimNext(t *testing.T) {
+	ctx, _, repo, repositoryID := setupRepositorySyncJobRepository(t)
+	now := time.Now().UTC()
+	job := &domain.RepositorySyncJob{
+		ID: uuid.NewString(), RepositoryID: repositoryID,
+		Status: domain.RepositorySyncJobStatusPending,
+		CreatedAt: now, UpdatedAt: now,
+	}
+	if err := repo.Create(ctx, job); err != nil {
+		t.Fatalf("create sync job: %v", err)
+	}
+
+	claimed, err := repo.ClaimNext(ctx, "worker-a", 30*time.Second)
+	if err != nil {
+		t.Fatalf("claim sync job: %v", err)
+	}
+	if claimed == nil {
+		t.Fatal("expected a job to be claimed")
+	}
+	if claimed.ID != job.ID || claimed.Status != domain.RepositorySyncJobStatusRunning {
+		t.Fatalf("unexpected claimed job: %+v", claimed)
+	}
+	if claimed.Attempts != 1 {
+		t.Fatalf("expected attempts to increment to 1, got %d", claimed.Attempts)
+	}
+	if claimed.LeaseOwner == nil || *claimed.LeaseOwner != "worker-a" {
+		t.Fatalf("expected lease owner worker-a, got %v", claimed.LeaseOwner)
+	}
+	if claimed.LeaseExpiresAt == nil || !claimed.LeaseExpiresAt.After(time.Now()) {
+		t.Fatalf("expected future lease expiry, got %v", claimed.LeaseExpiresAt)
+	}
+
+	again, err := repo.ClaimNext(ctx, "worker-b", 30*time.Second)
+	if err != nil {
+		t.Fatalf("claim next job: %v", err)
+	}
+	if again != nil {
+		t.Fatalf("expected no claimable job, got %+v", again)
+	}
+}
+
+func TestRepositorySyncJobRepositoryReclaimsExpiredLease(t *testing.T) {
+	ctx, db, repo, repositoryID := setupRepositorySyncJobRepository(t)
+	job := &domain.RepositorySyncJob{
+		ID: uuid.NewString(), RepositoryID: repositoryID,
+		Status: domain.RepositorySyncJobStatusPending,
+		CreatedAt: time.Now().Add(-time.Minute),
+		UpdatedAt: time.Now().Add(-time.Minute),
+	}
+	if err := repo.Create(ctx, job); err != nil {
+		t.Fatalf("create sync job: %v", err)
+	}
+	if _, err := repo.ClaimNext(ctx, "worker-a", time.Second); err != nil {
+		t.Fatalf("initial claim: %v", err)
+	}
+	if _, err := db.Pool.Exec(ctx, `
+		UPDATE repository_sync_jobs
+		SET lease_expires_at = NOW() - INTERVAL '1 second'
+		WHERE id = $1
+	`, job.ID); err != nil {
+		t.Fatalf("expire lease: %v", err)
+	}
+
+	reclaimed, err := repo.ClaimNext(ctx, "worker-b", time.Minute)
+	if err != nil {
+		t.Fatalf("reclaim expired job: %v", err)
+	}
+	if reclaimed == nil || reclaimed.ID != job.ID {
+		t.Fatalf("expected expired job to be reclaimed, got %+v", reclaimed)
+	}
+	if reclaimed.LeaseOwner == nil || *reclaimed.LeaseOwner != "worker-b" {
+		t.Fatalf("expected new lease owner worker-b, got %v", reclaimed.LeaseOwner)
+	}
+	if reclaimed.Attempts != 2 {
+		t.Fatalf("expected second attempt, got %d", reclaimed.Attempts)
+	}
+}
+
+func TestRepositorySyncJobRepositoryClaimNextValidatesArguments(t *testing.T) {
+	ctx, _, repo, _ := setupRepositorySyncJobRepository(t)
+	if _, err := repo.ClaimNext(ctx, "", time.Minute); err == nil {
+		t.Fatal("expected empty worker ID to be rejected")
+	}
+	if _, err := repo.ClaimNext(ctx, "worker-a", 0); err == nil {
+		t.Fatal("expected non-positive lease duration to be rejected")
+	}
+}
