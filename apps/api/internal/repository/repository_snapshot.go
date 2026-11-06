@@ -7,8 +7,13 @@ import (
 	"github.com/kristopher1027/devflow-ai/internal/domain"
 )
 
-var ErrRepositorySnapshotNotFound = errors.New(
-	"repository snapshot not found",
+var (
+	ErrRepositorySnapshotNotFound = errors.New(
+		"repository snapshot not found",
+	)
+	ErrRepositorySnapshotAlreadyExists = errors.New(
+		"repository snapshot already exists",
+	)
 )
 
 type RepositorySnapshotRepository interface {
