@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/kristopher1027/devflow-ai/internal/database"
 	"github.com/kristopher1027/devflow-ai/internal/domain"
@@ -46,6 +47,14 @@ func (r *PostgresRepositorySnapshotRepository) Create(
 		snapshot.CreatedAt,
 	)
 	if err != nil {
+		var pgErr *pgconn.PgError
+
+		if errors.As(err, &pgErr) &&
+			pgErr.Code == "23505" &&
+			pgErr.ConstraintName == "uq_repository_snapshots_repository_commit" {
+			return ErrRepositorySnapshotAlreadyExists
+		}
+
 		return fmt.Errorf("create repository snapshot: %w", err)
 	}
 

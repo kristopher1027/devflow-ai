@@ -137,7 +137,20 @@ func (s *RepositorySyncServiceImpl) Sync(
 	}
 
 	if err := s.snapshotRepo.Create(ctx, snapshot); err != nil {
-		return nil, err
+		if !errors.Is(err, repository.ErrRepositorySnapshotAlreadyExists) {
+			return nil, err
+		}
+
+		existingSnapshot, findErr := s.snapshotRepo.FindByRepositoryIDAndCommitSHA(
+			ctx,
+			repositoryID,
+			commitSHA,
+		)
+		if findErr != nil {
+			return nil, findErr
+		}
+
+		return existingSnapshot, nil
 	}
 
 	syncedAt := time.Now().UTC()
