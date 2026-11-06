@@ -69,10 +69,10 @@ func (f *fakeRepositorySyncRepository) Delete(
 }
 
 type fakeRepositorySnapshotRepository struct {
-	findCalls       int
-	createCalls     int
-	snapshot        *domain.RepositorySnapshot
-	findErr         error
+	findCalls           int
+	createCalls         int
+	snapshot            *domain.RepositorySnapshot
+	findErr             error
 	createErr           error
 	createdSnapshot     *domain.RepositorySnapshot
 	snapshotAfterCreate *domain.RepositorySnapshot
