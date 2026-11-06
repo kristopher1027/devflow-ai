@@ -304,7 +304,7 @@ func TestRepositorySnapshotRepositoryDuplicateCommit(
 		t.Fatalf("create first snapshot: %v", err)
 	}
 
-	if err := repo.Create(ctx, second); err == nil {
-		t.Fatal("expected duplicate commit to be rejected")
+	if err := repo.Create(ctx, second); !errors.Is(err, ErrRepositorySnapshotAlreadyExists) {
+		t.Fatalf("expected ErrRepositorySnapshotAlreadyExists, got %v", err)
 	}
 }
